@@ -1,0 +1,7 @@
+routes:
+  - id: voc-sw-pms
+    when:
+      recordType: VOC
+      department: SW
+    targets: [pms]
+    require_human_gate: true
