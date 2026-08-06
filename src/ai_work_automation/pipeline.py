@@ -59,6 +59,7 @@ def run_case_automation(
     dry_run: bool = False,
     issue_type: str | None = None,
     custom_fields_config: PmsCustomFieldsConfig | None = None,
+    only_work_order_ids: set[str] | None = None,
 ) -> PipelineResult:
     if not opt_in.is_selected(case_id):
         result = _skip_result(case_id, "not_selected")
@@ -77,6 +78,9 @@ def run_case_automation(
     would_post: list[dict[str, Any]] = []
 
     for wo in work_orders:
+        if only_work_order_ids is not None and wo.id not in only_work_order_ids:
+            continue
+
         targets = resolve_targets(wo, routes)
         if "pms" not in targets:
             continue

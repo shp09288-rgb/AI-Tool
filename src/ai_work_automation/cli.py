@@ -130,7 +130,13 @@ def scan(
     opt = OptInStore(s.opt_in_path)
     sf_client, sf = _make_sf_adapter(s)
     try:
-        rows = scan_candidates(sf, opt, department=department)
+        rows = scan_candidates(
+            sf,
+            opt,
+            department=department,
+            asset_contains=s.scan_filters.asset_contains,
+            status_in=s.scan_filters.status_in,
+        )
     finally:
         sf_client.close()
 

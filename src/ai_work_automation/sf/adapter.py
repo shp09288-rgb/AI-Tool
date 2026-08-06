@@ -12,12 +12,26 @@ class SafetyError(Exception):
     pass
 
 
+def _soql_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
 class CandidateWorkOrder(BaseModel):
     """스캔 결과: 케이스 정보가 붙은 워크오더."""
 
     work_order: WorkOrderRecord
     case_number: str
     case_subject: str
+    asset_name: str = ""
+    asset_sid: str = ""
+    status: str = ""
+
+
+class CaseSearchResult(BaseModel):
+    case_id: str
+    case_number: str
+    subject: str
+    created_date: str
 
 
 class SalesforceAdapter:
@@ -123,16 +137,31 @@ class SalesforceAdapter:
     def find_recent_voc_work_orders(
         self,
         department: str,
+        asset_contains: list[str] | None = None,
+        status_in: list[str] | None = None,
         limit: int = 50,
     ) -> list[CandidateWorkOrder]:
         """컷오프 이후 생성된 VOC 워크오더 중 지정 부서의 것을 최신순으로 조회한다."""
         field_list = ", ".join(self._wo_soql_fields())
         cutoff_str = self.cutoff.isoformat()
+        conditions = [
+            "RecordType.DeveloperName = 'VOC'",
+            f"{self.wo_department_soql_field()} = '{department}'",
+            f"CreatedDate > {cutoff_str}",
+        ]
+        if asset_contains:
+            likes = " OR ".join(
+                f"Asset.Name LIKE '%{_soql_escape(kw)}%'" for kw in asset_contains
+            )
+            conditions.append(f"({likes})")
+        if status_in:
+            values = ", ".join(f"'{_soql_escape(v)}'" for v in status_in)
+            conditions.append(f"Status IN ({values})")
+
         soql = (
-            f"SELECT {field_list}, Case.CaseNumber, Case.Subject FROM WorkOrder "
-            f"WHERE RecordType.DeveloperName = 'VOC' "
-            f"AND {self.wo_department_soql_field()} = '{department}' "
-            f"AND CreatedDate > {cutoff_str} "
+            f"SELECT {field_list}, Case.CaseNumber, Case.Subject, "
+            f"Asset.Name, Asset_SID__c, Status FROM WorkOrder "
+            f"WHERE {' AND '.join(conditions)} "
             f"ORDER BY CreatedDate DESC LIMIT {limit}"
         )
         data = self.client.query(soql)
@@ -144,9 +173,31 @@ class SalesforceAdapter:
                     work_order=self._row_to_work_order(row),
                     case_number=case_info.get("CaseNumber") or "",
                     case_subject=case_info.get("Subject") or "",
+                    asset_name=(row.get("Asset") or {}).get("Name") or "",
+                    asset_sid=row.get("Asset_SID__c") or "",
+                    status=row.get("Status") or "",
                 )
             )
         return out
+
+    def search_cases(self, keyword: str, limit: int = 20) -> list[CaseSearchResult]:
+        """케이스 번호 또는 제목에 키워드가 포함된 케이스를 최신순으로 검색한다."""
+        kw = _soql_escape(keyword)
+        soql = (
+            "SELECT Id, CaseNumber, Subject, CreatedDate FROM Case "
+            f"WHERE (CaseNumber LIKE '%{kw}%' OR Subject LIKE '%{kw}%') "
+            f"ORDER BY CreatedDate DESC LIMIT {limit}"
+        )
+        data = self.client.query(soql)
+        return [
+            CaseSearchResult(
+                case_id=row["Id"],
+                case_number=row.get("CaseNumber") or "",
+                subject=row.get("Subject") or "",
+                created_date=row.get("CreatedDate") or "",
+            )
+            for row in data.get("records", [])
+        ]
 
     def wo_department_soql_field(self) -> str:
         """wo_fields 중 부서 커스텀 필드를 찾는다 (기본 Relevant_Department__c)."""

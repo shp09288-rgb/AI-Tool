@@ -19,6 +19,13 @@ class PmsCustomFieldsConfig(BaseModel):
     customer_map: dict[str, str] = Field(default_factory=dict)
 
 
+class ScanFiltersConfig(BaseModel):
+    """스캔 기본 필터. 비어 있으면 조건을 적용하지 않는다."""
+
+    asset_contains: list[str] = Field(default_factory=list)
+    status_in: list[str] = Field(default_factory=list)
+
+
 class Settings(BaseModel):
     automation_enabled_after: datetime
     opt_in_path: Path = Path("data/opt_in.json")
@@ -33,6 +40,7 @@ class Settings(BaseModel):
     sf_access_token_env: str = "SF_ACCESS_TOKEN"
     sf_org_alias: str = "parksystems"
     pms_custom_fields: PmsCustomFieldsConfig = Field(default_factory=PmsCustomFieldsConfig)
+    scan_filters: ScanFiltersConfig = Field(default_factory=ScanFiltersConfig)
     dry_run: bool = False
 
 

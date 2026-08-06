@@ -29,6 +29,37 @@ pms_custom_fields:
     assert settings.pms_custom_fields.customer_map["SDC"] == "132"
 
 
+def test_load_settings_parses_scan_filters(tmp_path: Path):
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        """
+automation_enabled_after: "2026-12-01T00:00:00+09:00"
+scan_filters:
+  asset_contains: [NX-TSH1518, NX-TSH2225]
+  status_in: [New, In Progress]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(settings_file)
+
+    assert settings.scan_filters.asset_contains == ["NX-TSH1518", "NX-TSH2225"]
+    assert settings.scan_filters.status_in == ["New", "In Progress"]
+
+
+def test_load_settings_scan_filters_default_empty(tmp_path: Path):
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        'automation_enabled_after: "2026-12-01T00:00:00+09:00"',
+        encoding="utf-8",
+    )
+
+    settings = load_settings(settings_file)
+
+    assert settings.scan_filters.asset_contains == []
+    assert settings.scan_filters.status_in == []
+
+
 def test_load_settings_custom_fields_default_empty(tmp_path: Path):
     settings_file = tmp_path / "settings.yaml"
     settings_file.write_text(

@@ -28,6 +28,9 @@ def test_scan_candidates_marks_linked_and_selected(tmp_path: Path):
             work_order=_wo("0WO1", activities=""),
             case_number="00200750",
             case_subject="케이스 A",
+            asset_name="NX-TSH2326",
+            asset_sid="D25003-230523",
+            status="New",
         ),
         CandidateWorkOrder(
             work_order=_wo("0WO2", activities="https://pms.parksystems.com/issues/3807", case_id="500CASE2"),
@@ -38,17 +41,28 @@ def test_scan_candidates_marks_linked_and_selected(tmp_path: Path):
     opt = OptInStore(tmp_path / "opt.json")
     opt.select("500CASE1")
 
-    rows = scan_candidates(sf, opt, department="SW")
+    rows = scan_candidates(
+        sf,
+        opt,
+        department="SW",
+        asset_contains=["NX-TSH2326"],
+        status_in=["New"],
+    )
 
     assert len(rows) == 2
     first = rows[0]
     assert first.case_number == "00200750"
     assert first.linked is False
     assert first.selected is True
+    assert first.asset_name == "NX-TSH2326"
+    assert first.asset_sid == "D25003-230523"
+    assert first.status == "New"
     second = rows[1]
     assert second.linked is True
     assert second.selected is False
-    sf.find_recent_voc_work_orders.assert_called_once_with(department="SW")
+    sf.find_recent_voc_work_orders.assert_called_once_with(
+        department="SW", asset_contains=["NX-TSH2326"], status_in=["New"]
+    )
 
 
 def test_status_overview_fetches_issue_states(tmp_path: Path):

@@ -230,7 +230,7 @@ def test_scan_prints_candidates(tmp_path: Path, monkeypatch):
     seen: dict[str, object] = {}
     _patch_run_fakes(monkeypatch, seen)
 
-    def fake_scan(sf, opt_in, department="SW"):
+    def fake_scan(sf, opt_in, department="SW", **kwargs):
         return [
             ScanRow(
                 case_id="500CASE1",

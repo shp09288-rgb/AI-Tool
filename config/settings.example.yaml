@@ -19,4 +19,8 @@ sf_org_alias: parksystems
 #     LGD: "131"
 #     SDC: "132"
 #     공통: "143"
+# 스캔 기본 필터 (선택. 비우면 전체)
+# scan_filters:
+#   asset_contains: [NX-TSH1518, NX-TSH2225, NX-TSH2326]
+#   status_in: [New, Internal Review, In Progress]
 dry_run: true

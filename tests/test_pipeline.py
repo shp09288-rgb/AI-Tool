@@ -300,6 +300,43 @@ def test_create_passes_tracker_id_and_issue_type(
     assert pms.create.call_args.kwargs["tracker_id"] == 2
 
 
+def test_only_work_order_ids_restricts_processing(
+    tmp_path: Path, sample_case, sample_wo_voc_sw
+):
+    """다중 선택 시 지정한 워크오더 외에는 처리하지 않아야 한다."""
+    opt = OptInStore(tmp_path / "opt.json")
+    opt.select(sample_case.id)
+    log = JobLogStore(tmp_path / "log.jsonl")
+    wo_a = sample_wo_voc_sw.model_copy(update={"id": "0WOA", "work_order_number": "A"})
+    wo_b = sample_wo_voc_sw.model_copy(update={"id": "0WOB", "work_order_number": "B"})
+    sf = MagicMock()
+    sf.get_case.return_value = sample_case
+    sf.get_work_orders_for_case.return_value = [wo_a, wo_b]
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4900", url="https://pms.example/issues/4900"
+    )
+
+    result = run_case_automation(
+        case_id=sample_case.id,
+        opt_in=opt,
+        job_log=log,
+        sf=sf,
+        routes=_routes(),
+        pms=pms,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        pms_project_id=1,
+        approve_fn=lambda d: True,
+        idempotency=JsonIdempotencyStore(tmp_path / "idempotency.json"),
+        only_work_order_ids={"0WOB"},
+    )
+
+    assert result.status == "success"
+    assert pms.create.call_count == 1
+    acted = result.details["acted"]
+    assert [a["work_order_id"] for a in acted] == ["0WOB"]
+
+
 def test_create_passes_custom_fields_to_pms(
     tmp_path: Path, sample_case, sample_wo_voc_sw
 ):

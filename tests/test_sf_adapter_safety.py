@@ -207,6 +207,9 @@ def test_find_recent_voc_work_orders_queries_with_cutoff_and_department():
                 "CreatedDate": "2026-08-06T04:45:32.000+0000",
                 "CaseId": "500CASE9",
                 "Case": {"CaseNumber": "00200750", "Subject": "케이스 제목"},
+                "Asset": {"Name": "NX-TSH2326"},
+                "Asset_SID__c": "D25003-230523",
+                "Status": "New",
                 "Priority": "Medium",
                 "VOC_Activities__c": "",
                 "Relevant_Department__c": "SW",
@@ -226,10 +229,60 @@ def test_find_recent_voc_work_orders_queries_with_cutoff_and_department():
     assert rows[0].work_order.voc_title == "SDC A6 / NX / [PMS] 오류"
     assert rows[0].case_number == "00200750"
     assert rows[0].case_subject == "케이스 제목"
+    assert rows[0].asset_name == "NX-TSH2326"
+    assert rows[0].asset_sid == "D25003-230523"
+    assert rows[0].status == "New"
     soql = client.query.call_args.args[0]
     assert "RecordType.DeveloperName = 'VOC'" in soql
     assert "Relevant_Department__c = 'SW'" in soql
     assert "CreatedDate > 2026-08-01T00:00:00+00:00" in soql
+    assert "Asset.Name" in soql
+
+
+def test_find_recent_voc_work_orders_applies_asset_and_status_filters():
+    client = MagicMock()
+    client.query.return_value = {"records": []}
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+    adapter.find_recent_voc_work_orders(
+        department="SW",
+        asset_contains=["NX-TSH1518", "NX-TSH2225"],
+        status_in=["New", "In Progress"],
+    )
+
+    soql = client.query.call_args.args[0]
+    assert "(Asset.Name LIKE '%NX-TSH1518%' OR Asset.Name LIKE '%NX-TSH2225%')" in soql
+    assert "Status IN ('New', 'In Progress')" in soql
+
+
+def test_search_cases_by_number_or_subject():
+    client = MagicMock()
+    client.query.return_value = {
+        "records": [
+            {
+                "Id": "500CASE1",
+                "CaseNumber": "00173841",
+                "Subject": "Motor 축 SOL 이상",
+                "CreatedDate": "2025-12-19T06:51:38.000+0000",
+            }
+        ]
+    }
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+    rows = adapter.search_cases("Motor")
+
+    assert rows[0].case_id == "500CASE1"
+    assert rows[0].case_number == "00173841"
+    assert rows[0].subject == "Motor 축 SOL 이상"
+    soql = client.query.call_args.args[0]
+    assert "CaseNumber LIKE '%Motor%'" in soql
+    assert "Subject LIKE '%Motor%'" in soql
 
 
 def test_find_case_id_by_number():
