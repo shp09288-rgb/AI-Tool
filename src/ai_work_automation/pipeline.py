@@ -54,7 +54,10 @@ def run_case_automation(
         if "pms" not in targets:
             continue
 
-        if wo.created_date is not None and not is_after_cutoff(wo.created_date, cutoff):
+        if wo.created_date is None:
+            continue
+
+        if not is_after_cutoff(wo.created_date, cutoff):
             continue
 
         draft = build_pms_draft(case, wo)

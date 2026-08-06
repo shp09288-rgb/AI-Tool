@@ -70,3 +70,32 @@ def test_happy_path_pms_writeback(tmp_path: Path, sample_case, sample_wo_voc_sw)
     sf.append_work_order_activities.assert_called_once()
     args, kwargs = sf.append_work_order_activities.call_args
     assert "PMS – https://pms.example/issues/4710" in args[1]
+
+
+def test_skip_wo_with_missing_created_date_before_pms_create(
+    tmp_path: Path, sample_case, sample_wo_voc_sw
+):
+    opt = OptInStore(tmp_path / "opt.json")
+    opt.select(sample_case.id)
+    log = JobLogStore(tmp_path / "log.jsonl")
+    sf = MagicMock()
+    sf.get_case.return_value = sample_case
+    wo_no_date = sample_wo_voc_sw.model_copy(update={"created_date": None})
+    sf.get_work_orders_for_case.return_value = [wo_no_date]
+    pms = MagicMock()
+
+    result = run_case_automation(
+        case_id=sample_case.id,
+        opt_in=opt,
+        job_log=log,
+        sf=sf,
+        routes=_routes(),
+        pms=pms,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        pms_project_id=1,
+        approve_fn=lambda d: True,
+    )
+
+    assert result.status == "noop"
+    pms.create.assert_not_called()
+    sf.append_work_order_activities.assert_not_called()
