@@ -22,6 +22,7 @@ dry_run: true
     assert settings.pms_project_id == 1
     assert settings.wo_department_field == "Relevant_Department__c"
     assert settings.idempotency_path == Path("data/idempotency.json")
+    assert settings.sf_org_alias == "parksystems"
 
 
 def test_load_settings_overrides_project_and_department(tmp_path: Path):
@@ -36,6 +37,7 @@ pms_base_url: https://pms.parksystems.com
 pms_project_id: 7
 wo_department_field: Department__c
 idempotency_path: custom/idempotency.json
+sf_org_alias: my-sandbox
 dry_run: true
 """.strip(),
         encoding="utf-8",
@@ -46,3 +48,4 @@ dry_run: true
     assert settings.pms_project_id == 7
     assert settings.wo_department_field == "Department__c"
     assert settings.idempotency_path == Path("custom/idempotency.json")
+    assert settings.sf_org_alias == "my-sandbox"

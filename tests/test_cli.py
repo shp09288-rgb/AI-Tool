@@ -116,3 +116,61 @@ def test_run_wires_dependencies_and_prints_result(tmp_path: Path, monkeypatch):
     assert seen["run_kwargs"]["case_id"] == "500CASE1"
     assert seen["run_kwargs"]["pms_project_id"] == 9
     assert seen["run_kwargs"]["approve_fn"] is not None
+
+
+def test_run_falls_back_to_sf_cli_when_env_missing(tmp_path: Path, monkeypatch):
+    from ai_work_automation import cli
+
+    runner = CliRunner()
+    settings_file = _write_settings(tmp_path)
+    seen: dict[str, object] = {}
+
+    monkeypatch.delenv("SF_INSTANCE_URL", raising=False)
+    monkeypatch.delenv("SF_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("PMS_API_KEY", "pms-token")
+
+    def fake_resolve(instance_url, access_token, org_alias, **kwargs):
+        seen["resolve_args"] = (instance_url, access_token, org_alias)
+        return ("https://cli.my.salesforce.com", "CLI_TOKEN")
+
+    class FakeResponse:
+        def model_dump_json(self, *, ensure_ascii: bool, indent: int) -> str:
+            return '{"status":"success"}'
+
+    class FakeSFClient:
+        def __init__(self, instance_url: str, access_token: str) -> None:
+            seen["sf_client"] = (instance_url, access_token)
+
+        def close(self) -> None:
+            pass
+
+    class FakeSFAdapter:
+        def __init__(self, *, client, cutoff, wo_fields=None) -> None:
+            pass
+
+    class FakeHTTPXClient:
+        def __init__(self, *, base_url: str, timeout: float) -> None:
+            pass
+
+        def close(self) -> None:
+            pass
+
+    class FakePmsConnector:
+        def __init__(self, *, client, api_key: str, base_url: str) -> None:
+            pass
+
+    monkeypatch.setattr(cli, "resolve_sf_credentials", fake_resolve)
+    monkeypatch.setattr(cli, "SalesforceHttpClient", FakeSFClient)
+    monkeypatch.setattr(cli, "SalesforceAdapter", FakeSFAdapter)
+    monkeypatch.setattr(cli.httpx, "Client", FakeHTTPXClient)
+    monkeypatch.setattr(cli, "PmsConnector", FakePmsConnector)
+    monkeypatch.setattr(cli, "run_case_automation", lambda **kwargs: FakeResponse())
+
+    result = runner.invoke(
+        app,
+        ["run", "500CASE1", "--settings", str(settings_file), "--yes"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen["resolve_args"] == (None, None, "parksystems")
+    assert seen["sf_client"] == ("https://cli.my.salesforce.com", "CLI_TOKEN")

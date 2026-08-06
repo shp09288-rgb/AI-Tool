@@ -17,6 +17,7 @@ from ai_work_automation.router import load_routes
 from ai_work_automation.settings import load_settings
 from ai_work_automation.sf.adapter import SalesforceAdapter
 from ai_work_automation.sf.client import SalesforceHttpClient
+from ai_work_automation.sf.token_provider import resolve_sf_credentials
 
 load_dotenv()
 
@@ -85,10 +86,13 @@ def run(
     log = JobLogStore(s.job_log_path)
     routes = load_routes(s.routes_path)
 
-    sf_client = SalesforceHttpClient(
-        _require_env(s.sf_instance_url_env),
-        _require_env(s.sf_access_token_env),
+    # 환경변수에 없으면 로그인된 sf CLI에서 토큰을 자동으로 가져온다
+    sf_instance_url, sf_access_token = resolve_sf_credentials(
+        os.environ.get(s.sf_instance_url_env),
+        os.environ.get(s.sf_access_token_env),
+        s.sf_org_alias,
     )
+    sf_client = SalesforceHttpClient(sf_instance_url, sf_access_token)
     pms_http = httpx.Client(base_url=s.pms_base_url, timeout=60.0)
     try:
         sf = SalesforceAdapter(

@@ -15,7 +15,22 @@
    Copy-Item .env.example .env
    Copy-Item config\settings.example.yaml config\settings.yaml
    ```
-3. `config/settings.yaml`에서 `automation_enabled_after`, 경로, `pms_project_id`를 확인하고, `.env`에서 Salesforce와 PMS 토큰을 설정합니다.
+3. `config/settings.yaml`에서 `automation_enabled_after`, 경로, `pms_project_id`를 확인하고, `.env`에서 PMS 토큰을 설정합니다.
+
+## Salesforce 인증
+
+우선순위는 다음과 같습니다.
+
+1. `.env`의 `SF_INSTANCE_URL` / `SF_ACCESS_TOKEN` 값이 있으면 그대로 사용
+2. 없으면 로그인된 Salesforce CLI에서 자동으로 토큰을 가져옴 (`sf org display --target-org <sf_org_alias> --json`)
+
+즉, 아래처럼 sf CLI에 로그인만 되어 있으면 `.env`에 Salesforce 값을 넣지 않아도 됩니다.
+
+```powershell
+sf org login web --alias parksystems
+```
+
+org 별칭이 다르면 `config/settings.yaml`의 `sf_org_alias`를 수정하세요. sf CLI 세션 토큰이 만료되면 위 로그인 명령을 다시 실행하면 됩니다.
 4. Case를 선택하고 확인합니다.
    ```powershell
    ai-work select <CaseId>

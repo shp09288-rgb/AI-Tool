@@ -17,6 +17,7 @@ class Settings(BaseModel):
     pms_api_key_env: str = "PMS_API_KEY"
     sf_instance_url_env: str = "SF_INSTANCE_URL"
     sf_access_token_env: str = "SF_ACCESS_TOKEN"
+    sf_org_alias: str = "parksystems"
     dry_run: bool = False
 
 
