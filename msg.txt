@@ -1,0 +1,2 @@
+feat: Salesforce 어댑터와 Activities 쓰기 안전 가드 추가
+
