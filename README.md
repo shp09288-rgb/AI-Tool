@@ -31,15 +31,25 @@ sf org login web --alias parksystems
 ```
 
 org 별칭이 다르면 `config/settings.yaml`의 `sf_org_alias`를 수정하세요. sf CLI 세션 토큰이 만료되면 위 로그인 명령을 다시 실행하면 됩니다.
-4. Case를 선택하고 확인합니다.
+4. Case를 선택하고 확인합니다. Case Id 대신 Case Number(예: 00173841)를 써도 됩니다.
    ```powershell
-   ai-work select <CaseId>
+   ai-work select 00173841
    ai-work list-selected
    ```
 5. 실행합니다.
    ```powershell
-   ai-work run <CaseId>
+   ai-work run 00173841 --dry-run   # 시뮬레이션만 (등록될 내용 미리보기)
+   ai-work run 00173841 --real      # 실제 등록 (등록 전 승인 질문)
+   ai-work run 00173841 --type er   # PMS 이슈 타입 지정 (sr|er, 생략 시 제목으로 자동 추정)
    ```
+   `--dry-run`/`--real`을 생략하면 `config/settings.yaml`의 `dry_run` 값을 따릅니다.
+
+## PMS 등록 동작
+
+- 제목: 워크오더의 VOC Title(없으면 Case 제목)을 그대로 사용합니다.
+- 타입: SR(문제/버그 신고, 트래커 1) / ER(개선·추가 요청, 트래커 2). 제목에 "요청/개선/추가"가 있으면 ER로 자동 추정하며 `--type`으로 지정할 수 있습니다.
+- 후속 워크오더: 같은 Case의 다른 워크오더에 이미 PMS 이슈가 연결돼 있으면, 신규 이슈를 만들지 않고 그 이슈에 댓글을 추가합니다. 워크오더 Activities에는 `PMS – <이슈 URL> (댓글)` 형식으로 기록됩니다.
+- 이미 Activities에 PMS 이슈 링크가 있는 워크오더는 건너뜁니다(중복 방지).
 
 ## 안전 규칙
 

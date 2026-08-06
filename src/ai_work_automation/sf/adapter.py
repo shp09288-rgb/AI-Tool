@@ -65,6 +65,13 @@ class SalesforceAdapter:
             {self.activities_field: new_value},
         )
 
+    def find_case_id_by_number(self, case_number: str) -> str | None:
+        soql = f"SELECT Id, CaseNumber FROM Case WHERE CaseNumber = '{case_number}'"
+        records = self.client.query(soql).get("records", [])
+        if not records:
+            return None
+        return records[0]["Id"]
+
     def get_case(self, case_id: str) -> CaseRecord:
         data = self.client.get_sobject("Case", case_id, self.case_fields)
         return CaseRecord(
@@ -90,6 +97,7 @@ class SalesforceAdapter:
             "CreatedDate",
             "CaseId",
             "Priority",
+            "VOC_Title__c",
             self.activities_field,
             "RecordType.Name",
         }
@@ -120,6 +128,7 @@ class SalesforceAdapter:
                     record_type=(row.get("RecordType") or {}).get("Name") or "",
                     relevant_department=self._relevant_department_from_row(row),
                     subject=row.get("Subject"),
+                    voc_title=row.get("VOC_Title__c"),
                     activities=activities,
                     case_id=row.get("CaseId"),
                     created_date=datetime.fromisoformat(created.replace("Z", "+00:00")) if created else None,

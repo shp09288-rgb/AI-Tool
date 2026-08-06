@@ -85,6 +85,74 @@ def test_append_succeeds_when_allowed():
     assert "PMS - https://pms.example/issues/1" in body["VOC_Activities__c"]
 
 
+def test_get_work_orders_maps_voc_title_and_keeps_department():
+    client = MagicMock()
+    client.query.return_value = {
+        "records": [
+            {
+                "Id": "0WONEW",
+                "WorkOrderNumber": "1",
+                "Subject": None,
+                "CreatedDate": "2026-12-02T00:00:00Z",
+                "CaseId": "500CASE1",
+                "Priority": "High",
+                "VOC_Activities__c": "",
+                "VOC_Title__c": "공통 / NX / [PMS] Alarm 분기 요청",
+                "Relevant_Department__c": "SW",
+                "RecordType": {"Name": "VOC"},
+            }
+        ]
+    }
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        wo_fields=[
+            "Id",
+            "WorkOrderNumber",
+            "Subject",
+            "CreatedDate",
+            "CaseId",
+            "Priority",
+            "VOC_Activities__c",
+            "VOC_Title__c",
+            "Relevant_Department__c",
+        ],
+    )
+
+    work_orders = adapter.get_work_orders_for_case("500CASE1")
+
+    assert work_orders[0].voc_title == "공통 / NX / [PMS] Alarm 분기 요청"
+    assert work_orders[0].relevant_department == "SW"
+
+
+def test_find_case_id_by_number():
+    client = MagicMock()
+    client.query.return_value = {
+        "records": [{"Id": "500CASE1", "CaseNumber": "00173841"}]
+    }
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+    )
+
+    case_id = adapter.find_case_id_by_number("00173841")
+
+    assert case_id == "500CASE1"
+    soql = client.query.call_args.args[0]
+    assert "CaseNumber = '00173841'" in soql
+
+
+def test_find_case_id_by_number_returns_none_when_missing():
+    client = MagicMock()
+    client.query.return_value = {"records": []}
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+    )
+
+    assert adapter.find_case_id_by_number("99999999") is None
+
+
 def test_get_work_orders_maps_relevant_department_from_custom_field():
     client = MagicMock()
     client.query.return_value = {

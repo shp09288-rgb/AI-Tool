@@ -30,6 +30,39 @@ def test_create_issue_success():
     assert result.url == "https://pms.example/issues/4710"
 
 
+def test_add_comment_success():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PUT"
+        assert request.url.path.endswith("/issues/3807.json")
+        assert request.headers.get("X-Redmine-API-Key") == "secret"
+        assert json.loads(request.content) == {"issue": {"notes": "댓글 내용"}}
+        return httpx.Response(204)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, base_url="https://pms.example")
+    connector = PmsConnector(client=client, api_key="secret", base_url="https://pms.example")
+
+    result = connector.add_comment("3807", "댓글 내용")
+
+    assert result.ok is True
+    assert result.ref == "3807"
+    assert result.url == "https://pms.example/issues/3807"
+
+
+def test_add_comment_failure():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="not found")
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, base_url="https://pms.example")
+    connector = PmsConnector(client=client, api_key="secret", base_url="https://pms.example")
+
+    result = connector.add_comment("999999", "댓글")
+
+    assert result.ok is False
+    assert result.retryable is False
+
+
 def test_create_issue_failure():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="error")

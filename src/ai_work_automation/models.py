@@ -19,6 +19,7 @@ class WorkOrderRecord(BaseModel):
     record_type: str
     relevant_department: str | None = None
     subject: str | None = None
+    voc_title: str | None = None
     activities: str | None = None
     case_id: str | None = None
     created_date: datetime | None = None
