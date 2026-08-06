@@ -4,6 +4,8 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
 .pytest_cache/
 data/
 *.egg-info/
@@ -11,3 +13,4 @@ dist/
 build/
 msg.txt
 commit-msg.txt
+config/settings.yaml

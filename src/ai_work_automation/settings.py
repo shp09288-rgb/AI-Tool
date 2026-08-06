@@ -11,6 +11,8 @@ class Settings(BaseModel):
     job_log_path: Path = Path("data/job_log.jsonl")
     routes_path: Path = Path("config/routes.yaml")
     pms_base_url: str = "https://pms.parksystems.com"
+    pms_project_id: int = 1
+    wo_department_field: str = "Relevant_Department__c"
     pms_api_key_env: str = "PMS_API_KEY"
     sf_instance_url_env: str = "SF_INSTANCE_URL"
     sf_access_token_env: str = "SF_ACCESS_TOKEN"
