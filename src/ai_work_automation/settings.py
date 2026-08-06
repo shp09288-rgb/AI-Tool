@@ -9,6 +9,7 @@ class Settings(BaseModel):
     automation_enabled_after: datetime
     opt_in_path: Path = Path("data/opt_in.json")
     job_log_path: Path = Path("data/job_log.jsonl")
+    idempotency_path: Path = Path("data/idempotency.json")
     routes_path: Path = Path("config/routes.yaml")
     pms_base_url: str = "https://pms.parksystems.com"
     pms_project_id: int = 1

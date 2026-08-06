@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from ai_work_automation.connectors.pms import PmsConnector
 from ai_work_automation.gate.human import human_approve
+from ai_work_automation.idempotency import JsonIdempotencyStore
 from ai_work_automation.job_log import JobLogStore
 from ai_work_automation.opt_in import OptInStore
 from ai_work_automation.pipeline import run_case_automation
@@ -88,28 +89,46 @@ def run(
         _require_env(s.sf_instance_url_env),
         _require_env(s.sf_access_token_env),
     )
-    sf = SalesforceAdapter(client=sf_client, cutoff=s.automation_enabled_after)
-
     pms_http = httpx.Client(base_url=s.pms_base_url, timeout=60.0)
-    pms = PmsConnector(
-        client=pms_http,
-        api_key=_require_env(s.pms_api_key_env),
-        base_url=s.pms_base_url,
-    )
+    try:
+        sf = SalesforceAdapter(
+            client=sf_client,
+            cutoff=s.automation_enabled_after,
+            wo_fields=[
+                "Id",
+                "WorkOrderNumber",
+                "Subject",
+                "CreatedDate",
+                "CaseId",
+                "Priority",
+                s.wo_department_field,
+                "VOC_Activities__c",
+            ],
+        )
+        pms = PmsConnector(
+            client=pms_http,
+            api_key=_require_env(s.pms_api_key_env),
+            base_url=s.pms_base_url,
+        )
+        idempotency = JsonIdempotencyStore(s.idempotency_path)
 
-    approve_fn = (lambda _draft: True) if yes else human_approve
-    result = run_case_automation(
-        case_id=case_id,
-        opt_in=opt,
-        job_log=log,
-        sf=sf,
-        routes=routes,
-        pms=pms,
-        cutoff=s.automation_enabled_after,
-        pms_project_id=s.pms_project_id,
-        approve_fn=approve_fn,
-    )
-    typer.echo(result.model_dump_json(ensure_ascii=False, indent=2))
+        approve_fn = (lambda _draft: True) if yes else human_approve
+        result = run_case_automation(
+            case_id=case_id,
+            opt_in=opt,
+            job_log=log,
+            sf=sf,
+            routes=routes,
+            pms=pms,
+            cutoff=s.automation_enabled_after,
+            pms_project_id=s.pms_project_id,
+            approve_fn=approve_fn,
+            idempotency=idempotency,
+        )
+        typer.echo(result.model_dump_json(ensure_ascii=False, indent=2))
+    finally:
+        sf_client.close()
+        pms_http.close()
 
 
 if __name__ == "__main__":

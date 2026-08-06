@@ -16,6 +16,7 @@ def _write_settings(tmp_path: Path) -> Path:
 automation_enabled_after: "2026-12-01T00:00:00+09:00"
 opt_in_path: {opt_in_path.as_posix()}
 job_log_path: {job_log_path.as_posix()}
+idempotency_path: { (tmp_path / "idempotency.json").as_posix() }
 routes_path: {routes_path.as_posix()}
 pms_base_url: https://pms.parksystems.com
 pms_project_id: 9
@@ -73,13 +74,19 @@ def test_run_wires_dependencies_and_prints_result(tmp_path: Path, monkeypatch):
         def __init__(self, instance_url: str, access_token: str) -> None:
             seen["sf_client"] = (instance_url, access_token)
 
+        def close(self) -> None:
+            seen["sf_client_closed"] = True
+
     class FakeSFAdapter:
-        def __init__(self, *, client, cutoff) -> None:
-            seen["sf_adapter"] = (client, cutoff)
+        def __init__(self, *, client, cutoff, wo_fields=None) -> None:
+            seen["sf_adapter"] = (client, cutoff, wo_fields)
 
     class FakeHTTPXClient:
         def __init__(self, *, base_url: str, timeout: float) -> None:
             seen["httpx_client"] = (base_url, timeout)
+
+        def close(self) -> None:
+            seen["httpx_client_closed"] = True
 
     class FakePmsConnector:
         def __init__(self, *, client, api_key: str, base_url: str) -> None:
@@ -104,6 +111,8 @@ def test_run_wires_dependencies_and_prints_result(tmp_path: Path, monkeypatch):
     assert '"status":"success"' in result.output
     assert seen["sf_client"] == ("https://example.salesforce.com", "sf-token")
     assert seen["pms_connector"][1:] == ("pms-token", "https://pms.parksystems.com")
+    assert "Department__c" in seen["sf_adapter"][2]
+    assert seen["run_kwargs"]["idempotency"].path == tmp_path / "idempotency.json"
     assert seen["run_kwargs"]["case_id"] == "500CASE1"
     assert seen["run_kwargs"]["pms_project_id"] == 9
     assert seen["run_kwargs"]["approve_fn"] is not None

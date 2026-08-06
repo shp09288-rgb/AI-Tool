@@ -83,3 +83,42 @@ def test_append_succeeds_when_allowed():
     body = args[2]
     assert "기존메모" in body["VOC_Activities__c"]
     assert "PMS - https://pms.example/issues/1" in body["VOC_Activities__c"]
+
+
+def test_get_work_orders_maps_relevant_department_from_custom_field():
+    client = MagicMock()
+    client.query.return_value = {
+        "records": [
+            {
+                "Id": "0WONEW",
+                "WorkOrderNumber": "1",
+                "Subject": "VOC case",
+                "CreatedDate": "2026-12-02T00:00:00Z",
+                "CaseId": "500CASE1",
+                "Priority": "High",
+                "VOC_Activities__c": "",
+                "Relevant_Department__c": "SW",
+                "RecordType": {"Name": "VOC"},
+            }
+        ]
+    }
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        wo_fields=[
+            "Id",
+            "WorkOrderNumber",
+            "Subject",
+            "CreatedDate",
+            "CaseId",
+            "Priority",
+            "VOC_Activities__c",
+            "Relevant_Department__c",
+        ],
+    )
+
+    work_orders = adapter.get_work_orders_for_case("500CASE1")
+
+    assert work_orders[0].relevant_department == "SW"
+    soql = client.query.call_args.args[0]
+    assert "Relevant_Department__c" in soql

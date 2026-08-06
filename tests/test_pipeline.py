@@ -7,6 +7,7 @@ from ai_work_automation.models import ConnectorResult
 from ai_work_automation.opt_in import OptInStore
 from ai_work_automation.pipeline import PipelineResult, run_case_automation
 from ai_work_automation.router import RouteRule, RouteWhen
+from ai_work_automation.idempotency import JsonIdempotencyStore
 
 
 def _routes():
@@ -34,6 +35,7 @@ def test_skip_when_not_selected(tmp_path: Path, sample_case):
         cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
         pms_project_id=1,
         approve_fn=lambda d: True,
+        idempotency=JsonIdempotencyStore(tmp_path / "idempotency.json"),
     )
 
     assert isinstance(result, PipelineResult)
@@ -64,6 +66,7 @@ def test_happy_path_pms_writeback(tmp_path: Path, sample_case, sample_wo_voc_sw)
         cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
         pms_project_id=1,
         approve_fn=lambda d: True,
+        idempotency=JsonIdempotencyStore(tmp_path / "idempotency.json"),
     )
 
     assert result.status == "success"
@@ -94,6 +97,38 @@ def test_skip_wo_with_missing_created_date_before_pms_create(
         cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
         pms_project_id=1,
         approve_fn=lambda d: True,
+        idempotency=JsonIdempotencyStore(tmp_path / "idempotency.json"),
+    )
+
+    assert result.status == "noop"
+    pms.create.assert_not_called()
+    sf.append_work_order_activities.assert_not_called()
+
+
+def test_skip_when_idempotency_key_exists(
+    tmp_path: Path, sample_case, sample_wo_voc_sw
+):
+    opt = OptInStore(tmp_path / "opt.json")
+    opt.select(sample_case.id)
+    log = JobLogStore(tmp_path / "log.jsonl")
+    store = JsonIdempotencyStore(tmp_path / "idempotency.json")
+    store.record(sample_wo_voc_sw.id, "pms", ref="4710", url="https://pms.example/issues/4710")
+    sf = MagicMock()
+    sf.get_case.return_value = sample_case
+    sf.get_work_orders_for_case.return_value = [sample_wo_voc_sw]
+    pms = MagicMock()
+
+    result = run_case_automation(
+        case_id=sample_case.id,
+        opt_in=opt,
+        job_log=log,
+        sf=sf,
+        routes=_routes(),
+        pms=pms,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        pms_project_id=1,
+        approve_fn=lambda d: True,
+        idempotency=store,
     )
 
     assert result.status == "noop"

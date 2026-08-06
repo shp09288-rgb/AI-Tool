@@ -44,3 +44,6 @@ class SalesforceHttpClient:
         )
         response.raise_for_status()
 
+    def close(self) -> None:
+        self._client.close()
+

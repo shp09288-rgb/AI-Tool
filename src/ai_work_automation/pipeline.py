@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from ai_work_automation.cutoff import is_after_cutoff
+from ai_work_automation.idempotency import JsonIdempotencyStore
 from ai_work_automation.draft_template import build_pms_draft
 from ai_work_automation.job_log import JobLogStore
 from ai_work_automation.models import DraftContent
@@ -34,6 +35,7 @@ def run_case_automation(
     cutoff: datetime,
     pms_project_id: int,
     approve_fn: Callable[[DraftContent], bool],
+    idempotency: JsonIdempotencyStore,
 ) -> PipelineResult:
     if not opt_in.is_selected(case_id):
         result = _skip_result(case_id, "not_selected")
@@ -71,6 +73,17 @@ def run_case_automation(
             )
             continue
 
+        if idempotency.has(wo.id, "pms"):
+            job_log.append(
+                {
+                    "case_id": case_id,
+                    "work_order_id": wo.id,
+                    "status": "skipped",
+                    "reason": "already_linked",
+                }
+            )
+            continue
+
         existing_activities = wo.activities or ""
         if "PMS – " in existing_activities and "pms." in existing_activities.lower():
             job_log.append(
@@ -81,6 +94,7 @@ def run_case_automation(
                     "reason": "already_linked",
                 }
             )
+            idempotency.record(wo.id, "pms", ref=None, url=None)
             continue
 
         conn_result = pms.create(draft, project_id=pms_project_id)
@@ -97,6 +111,7 @@ def run_case_automation(
 
         line = f"PMS – {conn_result.url}"
         sf.append_work_order_activities(wo, line, case_selected=True)
+        idempotency.record(wo.id, "pms", ref=conn_result.ref, url=conn_result.url)
         acted.append({"work_order_id": wo.id, "url": conn_result.url})
 
     result = PipelineResult(
