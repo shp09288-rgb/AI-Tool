@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel
+
 from ai_work_automation.cutoff import is_after_cutoff
 from ai_work_automation.models import AttachmentRef, CaseRecord, WorkOrderRecord
 from ai_work_automation.sf.client import SalesforceHttpClient
@@ -8,6 +10,14 @@ from ai_work_automation.sf.client import SalesforceHttpClient
 
 class SafetyError(Exception):
     pass
+
+
+class CandidateWorkOrder(BaseModel):
+    """스캔 결과: 케이스 정보가 붙은 워크오더."""
+
+    work_order: WorkOrderRecord
+    case_number: str
+    case_subject: str
 
 
 class SalesforceAdapter:
@@ -89,6 +99,74 @@ class SalesforceAdapter:
             )
         return out
 
+    def _row_to_work_order(self, row: dict[str, Any]) -> WorkOrderRecord:
+        created = row.get("CreatedDate")
+        activities = (
+            row.get(self.activities_field)
+            if self.activities_field in self.wo_fields
+            else None
+        )
+        return WorkOrderRecord(
+            id=row["Id"],
+            work_order_number=row.get("WorkOrderNumber") or "",
+            record_type=(row.get("RecordType") or {}).get("Name") or "",
+            relevant_department=self._relevant_department_from_row(row),
+            subject=row.get("Subject"),
+            voc_title=row.get("VOC_Title__c"),
+            background=row.get("Background_Problem__c"),
+            activities=activities,
+            case_id=row.get("CaseId"),
+            created_date=datetime.fromisoformat(created.replace("Z", "+00:00")) if created else None,
+            priority=row.get("Priority"),
+        )
+
+    def find_recent_voc_work_orders(
+        self,
+        department: str,
+        limit: int = 50,
+    ) -> list[CandidateWorkOrder]:
+        """컷오프 이후 생성된 VOC 워크오더 중 지정 부서의 것을 최신순으로 조회한다."""
+        field_list = ", ".join(self._wo_soql_fields())
+        cutoff_str = self.cutoff.isoformat()
+        soql = (
+            f"SELECT {field_list}, Case.CaseNumber, Case.Subject FROM WorkOrder "
+            f"WHERE RecordType.DeveloperName = 'VOC' "
+            f"AND {self.wo_department_soql_field()} = '{department}' "
+            f"AND CreatedDate > {cutoff_str} "
+            f"ORDER BY CreatedDate DESC LIMIT {limit}"
+        )
+        data = self.client.query(soql)
+        out: list[CandidateWorkOrder] = []
+        for row in data.get("records", []):
+            case_info = row.get("Case") or {}
+            out.append(
+                CandidateWorkOrder(
+                    work_order=self._row_to_work_order(row),
+                    case_number=case_info.get("CaseNumber") or "",
+                    case_subject=case_info.get("Subject") or "",
+                )
+            )
+        return out
+
+    def wo_department_soql_field(self) -> str:
+        """wo_fields 중 부서 커스텀 필드를 찾는다 (기본 Relevant_Department__c)."""
+        standard = {
+            "Id",
+            "WorkOrderNumber",
+            "Subject",
+            "CreatedDate",
+            "CaseId",
+            "Priority",
+            "VOC_Title__c",
+            "Background_Problem__c",
+            self.activities_field,
+            "RecordType.Name",
+        }
+        for field in self.wo_fields:
+            if field not in standard:
+                return field
+        return "Relevant_Department__c"
+
     def find_case_id_by_number(self, case_number: str) -> str | None:
         soql = f"SELECT Id, CaseNumber FROM Case WHERE CaseNumber = '{case_number}'"
         records = self.client.query(soql).get("records", [])
@@ -138,28 +216,5 @@ class SalesforceAdapter:
         field_list = ", ".join(self._wo_soql_fields())
         soql = f"SELECT {field_list} FROM WorkOrder WHERE CaseId = '{case_id}'"
         data = self.client.query(soql)
-        out: list[WorkOrderRecord] = []
-        for row in data.get("records", []):
-            created = row.get("CreatedDate")
-            activities = (
-                row.get(self.activities_field)
-                if self.activities_field in self.wo_fields
-                else None
-            )
-            out.append(
-                WorkOrderRecord(
-                    id=row["Id"],
-                    work_order_number=row.get("WorkOrderNumber") or "",
-                    record_type=(row.get("RecordType") or {}).get("Name") or "",
-                    relevant_department=self._relevant_department_from_row(row),
-                    subject=row.get("Subject"),
-                    voc_title=row.get("VOC_Title__c"),
-                    background=row.get("Background_Problem__c"),
-                    activities=activities,
-                    case_id=row.get("CaseId"),
-                    created_date=datetime.fromisoformat(created.replace("Z", "+00:00")) if created else None,
-                    priority=row.get("Priority"),
-                )
-            )
-        return out
+        return [self._row_to_work_order(row) for row in data.get("records", [])]
 

@@ -12,6 +12,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-mock>=3.12"]
+ui = ["streamlit>=1.36", "msal>=1.28"]
 
 [project.scripts]
 ai-work = "ai_work_automation.cli:app"

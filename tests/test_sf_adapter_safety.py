@@ -195,6 +195,43 @@ def test_get_attachments_builds_download_urls():
     assert "LinkedEntityId = '0WONEW'" in soql
 
 
+def test_find_recent_voc_work_orders_queries_with_cutoff_and_department():
+    client = MagicMock()
+    client.query.return_value = {
+        "records": [
+            {
+                "Id": "0WONEW",
+                "WorkOrderNumber": "00026031",
+                "Subject": None,
+                "VOC_Title__c": "SDC A6 / NX / [PMS] 오류",
+                "CreatedDate": "2026-08-06T04:45:32.000+0000",
+                "CaseId": "500CASE9",
+                "Case": {"CaseNumber": "00200750", "Subject": "케이스 제목"},
+                "Priority": "Medium",
+                "VOC_Activities__c": "",
+                "Relevant_Department__c": "SW",
+                "RecordType": {"Name": "VOC"},
+            }
+        ]
+    }
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+    rows = adapter.find_recent_voc_work_orders(department="SW")
+
+    assert len(rows) == 1
+    assert rows[0].work_order.id == "0WONEW"
+    assert rows[0].work_order.voc_title == "SDC A6 / NX / [PMS] 오류"
+    assert rows[0].case_number == "00200750"
+    assert rows[0].case_subject == "케이스 제목"
+    soql = client.query.call_args.args[0]
+    assert "RecordType.DeveloperName = 'VOC'" in soql
+    assert "Relevant_Department__c = 'SW'" in soql
+    assert "CreatedDate > 2026-08-01T00:00:00+00:00" in soql
+
+
 def test_find_case_id_by_number():
     client = MagicMock()
     client.query.return_value = {

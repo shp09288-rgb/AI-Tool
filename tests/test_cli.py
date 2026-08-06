@@ -221,6 +221,39 @@ def test_select_accepts_case_number(tmp_path: Path, monkeypatch):
     assert "500RESOLVED" in result.output
 
 
+def test_scan_prints_candidates(tmp_path: Path, monkeypatch):
+    from ai_work_automation import cli
+    from ai_work_automation.services import ScanRow
+
+    runner = CliRunner()
+    settings_file = _write_settings(tmp_path)
+    seen: dict[str, object] = {}
+    _patch_run_fakes(monkeypatch, seen)
+
+    def fake_scan(sf, opt_in, department="SW"):
+        return [
+            ScanRow(
+                case_id="500CASE1",
+                case_number="00200750",
+                case_subject="케이스 A",
+                work_order_id="0WO1",
+                work_order_number="00026031",
+                title="SDC A6 / [PMS] 오류",
+                created_date="2026-08-06T04:45:32+00:00",
+                linked=False,
+                selected=True,
+            )
+        ]
+
+    monkeypatch.setattr(cli, "scan_candidates", fake_scan)
+
+    result = runner.invoke(app, ["scan", "--settings", str(settings_file)])
+
+    assert result.exit_code == 0, result.output
+    assert "00200750" in result.output
+    assert "00026031" in result.output
+
+
 def test_run_falls_back_to_sf_cli_when_env_missing(tmp_path: Path, monkeypatch):
     from ai_work_automation import cli
 

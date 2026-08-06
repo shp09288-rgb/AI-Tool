@@ -44,6 +44,27 @@ org 별칭이 다르면 `config/settings.yaml`의 `sf_org_alias`를 수정하세
    ```
    `--dry-run`/`--real`을 생략하면 `config/settings.yaml`의 `dry_run` 값을 따릅니다.
 
+## 웹 UI
+
+명령어 대신 브라우저 화면으로 쓰려면:
+
+```powershell
+pip install -e ".[ui]"
+.venv\Scripts\streamlit.exe run src\ai_work_automation\webui.py
+```
+
+브라우저에서 http://localhost:8501 이 열립니다.
+
+- **후보 스캔·등록** 탭: 컷오프 이후 VOC+SW 워크오더 목록(연동 여부 표시) → 워크오더 선택 → 미리보기(dry-run) → 내용 확인 후 실제 등록
+- **PMS 이슈 상태** 탭: 옵트인된 케이스에 연결된 PMS 이슈들의 현재 상태 확인
+
+## 유용한 명령
+
+```powershell
+ai-work scan     # 컷오프 이후 VOC+SW 워크오더 후보 나열 (연동/선택 여부 표시)
+ai-work status   # 옵트인된 케이스의 PMS 이슈 상태 확인
+```
+
 ## PMS 등록 동작
 
 - 제목: 워크오더의 VOC Title(없으면 Case 제목)을 그대로 사용합니다.

@@ -59,6 +59,29 @@ class PmsConnector:
             raw=data,
         )
 
+    def get_issue(self, issue_id: str) -> ConnectorResult:
+        try:
+            response = self.client.get(
+                f"/issues/{issue_id}.json",
+                headers={"X-Redmine-API-Key": self.api_key},
+            )
+        except httpx.HTTPError as exc:
+            return ConnectorResult(ok=False, error=str(exc), retryable=True)
+
+        if response.status_code >= 400:
+            return ConnectorResult(
+                ok=False,
+                error=f"HTTP {response.status_code}: {response.text[:500]}",
+                retryable=response.status_code >= 500,
+            )
+
+        return ConnectorResult(
+            ok=True,
+            ref=issue_id,
+            url=f"{self.base_url}/issues/{issue_id}",
+            raw=response.json(),
+        )
+
     def add_comment(self, issue_id: str, notes: str) -> ConnectorResult:
         try:
             response = self.client.put(

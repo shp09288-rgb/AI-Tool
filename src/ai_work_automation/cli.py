@@ -15,6 +15,7 @@ from ai_work_automation.job_log import JobLogStore
 from ai_work_automation.opt_in import OptInStore
 from ai_work_automation.pipeline import run_case_automation
 from ai_work_automation.router import load_routes
+from ai_work_automation.services import scan_candidates, status_overview
 from ai_work_automation.settings import load_settings
 from ai_work_automation.sf.adapter import SalesforceAdapter
 from ai_work_automation.sf.client import SalesforceHttpClient
@@ -117,6 +118,62 @@ def list_alias(
     settings: Path = typer.Option(Path("config/settings.yaml"), "--settings"),
 ) -> None:
     _list_selected(settings)
+
+
+@app.command("scan")
+def scan(
+    settings: Path = typer.Option(Path("config/settings.yaml"), "--settings"),
+    department: str = typer.Option("SW", "--department", help="Relevant Department 값"),
+) -> None:
+    """컷오프 이후 생성된 VOC 워크오더 중 PMS 미연동 후보를 나열한다."""
+    s = _settings(settings)
+    opt = OptInStore(s.opt_in_path)
+    sf_client, sf = _make_sf_adapter(s)
+    try:
+        rows = scan_candidates(sf, opt, department=department)
+    finally:
+        sf_client.close()
+
+    if not rows:
+        typer.echo("컷오프 이후 생성된 해당 부서 VOC 워크오더가 없습니다.")
+        return
+    for row in rows:
+        mark_link = "연동됨" if row.linked else "미연동"
+        mark_sel = "선택됨" if row.selected else "  -  "
+        typer.echo(
+            f"{row.case_number}  WO {row.work_order_number}  [{mark_link}] [{mark_sel}]  "
+            f"{row.created_date[:10]}  {row.title}"
+        )
+
+
+@app.command("status")
+def status(
+    settings: Path = typer.Option(Path("config/settings.yaml"), "--settings"),
+) -> None:
+    """옵트인된 케이스들의 연결된 PMS 이슈 상태를 보여준다."""
+    s = _settings(settings)
+    opt = OptInStore(s.opt_in_path)
+    sf_client, sf = _make_sf_adapter(s)
+    pms_http = httpx.Client(base_url=s.pms_base_url, timeout=60.0)
+    try:
+        pms = PmsConnector(
+            client=pms_http,
+            api_key=_require_env(s.pms_api_key_env),
+            base_url=s.pms_base_url,
+        )
+        rows = status_overview(sf, pms, opt)
+    finally:
+        sf_client.close()
+        pms_http.close()
+
+    if not rows:
+        typer.echo("옵트인된 케이스에 연결된 PMS 이슈가 없습니다.")
+        return
+    for row in rows:
+        typer.echo(
+            f"WO {row.work_order_number}  PMS #{row.issue_id} [{row.issue_status}]  "
+            f"{row.issue_updated_on[:10]}  {row.issue_subject}"
+        )
 
 
 @app.command("run")

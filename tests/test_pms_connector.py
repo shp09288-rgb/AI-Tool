@@ -87,6 +87,33 @@ def test_add_comment_failure():
     assert result.retryable is False
 
 
+def test_get_issue_returns_status_info():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path.endswith("/issues/3807.json")
+        return httpx.Response(
+            200,
+            json={
+                "issue": {
+                    "id": 3807,
+                    "subject": "이슈 제목",
+                    "status": {"id": 5, "name": "Closed"},
+                    "updated_on": "2026-01-12T04:28:42Z",
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, base_url="https://pms.example")
+    connector = PmsConnector(client=client, api_key="secret", base_url="https://pms.example")
+
+    result = connector.get_issue("3807")
+
+    assert result.ok is True
+    assert result.raw["issue"]["status"]["name"] == "Closed"
+    assert result.url == "https://pms.example/issues/3807"
+
+
 def test_create_issue_failure():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="error")
