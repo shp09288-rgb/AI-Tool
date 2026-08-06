@@ -55,6 +55,7 @@ def _make_sf_adapter(s) -> tuple[SalesforceHttpClient, SalesforceAdapter]:
             "CaseId",
             "Priority",
             "VOC_Title__c",
+            "Background_Problem__c",
             s.wo_department_field,
             "VOC_Activities__c",
         ],

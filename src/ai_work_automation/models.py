@@ -20,11 +20,17 @@ class WorkOrderRecord(BaseModel):
     relevant_department: str | None = None
     subject: str | None = None
     voc_title: str | None = None
+    background: str | None = None
     activities: str | None = None
     case_id: str | None = None
     created_date: datetime | None = None
     priority: str | None = None
     sw_version: str | None = None
+
+
+class AttachmentRef(BaseModel):
+    title: str
+    url: str
 
 
 class DraftContent(BaseModel):

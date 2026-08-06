@@ -109,9 +109,11 @@ def run_case_automation(
             )
             continue
 
+        attachments = sf.get_attachments(wo.id)
+
         # 같은 케이스에 이미 PMS 이슈가 있으면 신규 생성 대신 그 이슈에 댓글
         if existing_issue is not None:
-            comment = build_pms_comment(case, wo)
+            comment = build_pms_comment(case, wo, attachments=attachments)
 
             if dry_run:
                 would_post.append(
@@ -156,7 +158,7 @@ def run_case_automation(
             )
             continue
 
-        draft = build_pms_draft(case, wo, issue_type=issue_type)
+        draft = build_pms_draft(case, wo, issue_type=issue_type, attachments=attachments)
 
         if dry_run:
             would_post.append(

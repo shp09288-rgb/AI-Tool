@@ -3,6 +3,7 @@ from ai_work_automation.draft_template import (
     build_pms_draft,
     classify_issue_type,
 )
+from ai_work_automation.models import AttachmentRef
 
 
 def test_classify_issue_type_er_when_title_is_request():
@@ -61,4 +62,45 @@ def test_comment_mentions_followup_work_order(sample_case, sample_wo_voc_sw):
     comment = build_pms_comment(sample_case, wo)
     assert wo.work_order_number in comment.body
     assert "후속" in comment.body
-    assert "상세 설명" in comment.body  # case description 포함
+    assert "상세 설명" in comment.body  # background 없으면 case description 사용
+
+
+def test_comment_prefers_wo_background_over_case_description(sample_case, sample_wo_voc_sw):
+    wo = sample_wo_voc_sw.model_copy(
+        update={"background": "디버깅 버전 적용 후에도 현상 재발"}
+    )
+    comment = build_pms_comment(sample_case, wo)
+    assert "디버깅 버전 적용 후에도 현상 재발" in comment.body
+    assert "상세 설명" not in comment.body  # case description 대신 background
+
+
+def test_draft_prefers_wo_background_over_case_description(sample_case, sample_wo_voc_sw):
+    wo = sample_wo_voc_sw.model_copy(update={"background": "스테이지 구동 불가"})
+    draft = build_pms_draft(sample_case, wo, issue_type="SR")
+    assert "스테이지 구동 불가" in draft.body
+    assert "상세 설명" not in draft.body
+
+
+def test_comment_includes_attachment_links(sample_case, sample_wo_voc_sw):
+    attachments = [
+        AttachmentRef(
+            title="Sample chuck 이염.png",
+            url="https://parksystems.my.salesforce.com/sfc/servlet.shepherd/document/download/069DOC1",
+        )
+    ]
+    comment = build_pms_comment(sample_case, sample_wo_voc_sw, attachments=attachments)
+    assert "첨부 파일" in comment.body
+    assert 'href="https://parksystems.my.salesforce.com/sfc/servlet.shepherd/document/download/069DOC1"' in comment.body
+    assert "Sample chuck 이염.png" in comment.body
+
+
+def test_draft_includes_attachment_links(sample_case, sample_wo_voc_sw):
+    attachments = [AttachmentRef(title="log.zip", url="https://sf.example/dl/069DOC2")]
+    draft = build_pms_draft(sample_case, sample_wo_voc_sw, issue_type="SR", attachments=attachments)
+    assert "첨부 파일" in draft.body
+    assert 'href="https://sf.example/dl/069DOC2"' in draft.body
+
+
+def test_no_attachment_section_when_empty(sample_case, sample_wo_voc_sw):
+    comment = build_pms_comment(sample_case, sample_wo_voc_sw, attachments=[])
+    assert "첨부 파일" not in comment.body

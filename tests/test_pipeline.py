@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from ai_work_automation.job_log import JobLogStore
-from ai_work_automation.models import ConnectorResult
+from ai_work_automation.models import AttachmentRef, ConnectorResult
 from ai_work_automation.opt_in import OptInStore
 from ai_work_automation.pipeline import PipelineResult, run_case_automation
 from ai_work_automation.router import RouteRule, RouteWhen
@@ -297,6 +297,45 @@ def test_create_passes_tracker_id_and_issue_type(
     )
 
     assert pms.create.call_args.kwargs["tracker_id"] == 2
+
+
+def test_dry_run_comment_includes_wo_attachments(
+    tmp_path: Path, sample_case, sample_wo_voc_sw
+):
+    opt = OptInStore(tmp_path / "opt.json")
+    opt.select(sample_case.id)
+    log = JobLogStore(tmp_path / "log.jsonl")
+    wo_old = sample_wo_voc_sw.model_copy(
+        update={"id": "0WOOLD", "activities": "https://pms.parksystems.com/issues/3807"}
+    )
+    wo_new = sample_wo_voc_sw.model_copy(
+        update={"id": "0WONEW", "work_order_number": "00023100", "activities": ""}
+    )
+    sf = MagicMock()
+    sf.get_case.return_value = sample_case
+    sf.get_work_orders_for_case.return_value = [wo_old, wo_new]
+    sf.get_attachments.return_value = [
+        AttachmentRef(title="Sample chuck 이염.png", url="https://sf.example/dl/069DOC1")
+    ]
+
+    result = run_case_automation(
+        case_id=sample_case.id,
+        opt_in=opt,
+        job_log=log,
+        sf=sf,
+        routes=_routes(),
+        pms=MagicMock(),
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        pms_project_id=1,
+        approve_fn=lambda d: True,
+        idempotency=JsonIdempotencyStore(tmp_path / "idempotency.json"),
+        dry_run=True,
+    )
+
+    sf.get_attachments.assert_called_once_with("0WONEW")
+    body = result.details["would_post"][0]["body"]
+    assert 'href="https://sf.example/dl/069DOC1"' in body
+    assert "Sample chuck 이염.png" in body
 
 
 def test_skip_when_idempotency_key_exists(

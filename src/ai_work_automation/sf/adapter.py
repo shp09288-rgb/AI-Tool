@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from ai_work_automation.cutoff import is_after_cutoff
-from ai_work_automation.models import CaseRecord, WorkOrderRecord
+from ai_work_automation.models import AttachmentRef, CaseRecord, WorkOrderRecord
 from ai_work_automation.sf.client import SalesforceHttpClient
 
 
@@ -65,6 +65,30 @@ class SalesforceAdapter:
             {self.activities_field: new_value},
         )
 
+    def get_attachments(self, record_id: str) -> list[AttachmentRef]:
+        soql = (
+            "SELECT ContentDocumentId, ContentDocument.Title, ContentDocument.FileExtension "
+            f"FROM ContentDocumentLink WHERE LinkedEntityId = '{record_id}'"
+        )
+        records = self.client.query(soql).get("records", [])
+        out: list[AttachmentRef] = []
+        for row in records:
+            doc = row.get("ContentDocument") or {}
+            title = doc.get("Title") or "첨부파일"
+            extension = doc.get("FileExtension")
+            if extension:
+                title = f"{title}.{extension}"
+            out.append(
+                AttachmentRef(
+                    title=title,
+                    url=(
+                        f"{self.client.instance_url}"
+                        f"/sfc/servlet.shepherd/document/download/{row['ContentDocumentId']}"
+                    ),
+                )
+            )
+        return out
+
     def find_case_id_by_number(self, case_number: str) -> str | None:
         soql = f"SELECT Id, CaseNumber FROM Case WHERE CaseNumber = '{case_number}'"
         records = self.client.query(soql).get("records", [])
@@ -98,6 +122,7 @@ class SalesforceAdapter:
             "CaseId",
             "Priority",
             "VOC_Title__c",
+            "Background_Problem__c",
             self.activities_field,
             "RecordType.Name",
         }
@@ -129,6 +154,7 @@ class SalesforceAdapter:
                     relevant_department=self._relevant_department_from_row(row),
                     subject=row.get("Subject"),
                     voc_title=row.get("VOC_Title__c"),
+                    background=row.get("Background_Problem__c"),
                     activities=activities,
                     case_id=row.get("CaseId"),
                     created_date=datetime.fromisoformat(created.replace("Z", "+00:00")) if created else None,

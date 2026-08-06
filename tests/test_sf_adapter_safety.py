@@ -125,6 +125,76 @@ def test_get_work_orders_maps_voc_title_and_keeps_department():
     assert work_orders[0].relevant_department == "SW"
 
 
+def test_get_work_orders_maps_background_problem():
+    client = MagicMock()
+    client.query.return_value = {
+        "records": [
+            {
+                "Id": "0WONEW",
+                "WorkOrderNumber": "1",
+                "Subject": None,
+                "CreatedDate": "2026-12-02T00:00:00Z",
+                "CaseId": "500CASE1",
+                "Priority": "High",
+                "VOC_Activities__c": "",
+                "VOC_Title__c": "제목",
+                "Background_Problem__c": "스테이지 구동 불가 현상 발생",
+                "Relevant_Department__c": "SW",
+                "RecordType": {"Name": "VOC"},
+            }
+        ]
+    }
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        wo_fields=[
+            "Id",
+            "WorkOrderNumber",
+            "Subject",
+            "CreatedDate",
+            "CaseId",
+            "Priority",
+            "VOC_Activities__c",
+            "VOC_Title__c",
+            "Background_Problem__c",
+            "Relevant_Department__c",
+        ],
+    )
+
+    work_orders = adapter.get_work_orders_for_case("500CASE1")
+
+    assert work_orders[0].background == "스테이지 구동 불가 현상 발생"
+    assert work_orders[0].relevant_department == "SW"
+
+
+def test_get_attachments_builds_download_urls():
+    client = MagicMock()
+    client.instance_url = "https://parksystems.my.salesforce.com"
+    client.query.return_value = {
+        "records": [
+            {
+                "ContentDocumentId": "069DOC1",
+                "ContentDocument": {"Title": "Sample chuck 이염", "FileExtension": "png"},
+            }
+        ]
+    }
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+    )
+
+    attachments = adapter.get_attachments("0WONEW")
+
+    assert len(attachments) == 1
+    assert attachments[0].title == "Sample chuck 이염.png"
+    assert (
+        attachments[0].url
+        == "https://parksystems.my.salesforce.com/sfc/servlet.shepherd/document/download/069DOC1"
+    )
+    soql = client.query.call_args.args[0]
+    assert "LinkedEntityId = '0WONEW'" in soql
+
+
 def test_find_case_id_by_number():
     client = MagicMock()
     client.query.return_value = {

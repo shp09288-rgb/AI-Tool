@@ -6,7 +6,12 @@
 
 import html
 
-from ai_work_automation.models import CaseRecord, DraftContent, WorkOrderRecord
+from ai_work_automation.models import (
+    AttachmentRef,
+    CaseRecord,
+    DraftContent,
+    WorkOrderRecord,
+)
 
 TRACKER_ID = {"SR": 1, "ER": 2}
 
@@ -42,18 +47,38 @@ def _to_html_paragraphs(text: str) -> str:
     return "\n".join(paragraphs)
 
 
+def _resolve_content(case: CaseRecord, wo: WorkOrderRecord) -> str | None:
+    """본문 내용: 워크오더의 배경/문제점/현안 우선, 없으면 Case 설명."""
+    return wo.background or case.description
+
+
+def _attachments_html(attachments: list[AttachmentRef] | None) -> str | None:
+    if not attachments:
+        return None
+    links = "\n".join(
+        f'<p><a href="{html.escape(att.url, quote=True)}">{html.escape(att.title)}</a></p>'
+        for att in attachments
+    )
+    return f"<p>[첨부 파일]</p>\n{links}"
+
+
 def build_pms_draft(
     case: CaseRecord,
     wo: WorkOrderRecord,
     issue_type: str | None = None,
+    attachments: list[AttachmentRef] | None = None,
 ) -> DraftContent:
     title = _resolve_title(case, wo)
     resolved_type = issue_type or classify_issue_type(title)
     header = _ER_HEADER if resolved_type == "ER" else _SR_HEADER
 
     parts = [header]
-    if case.description:
-        parts.append(_to_html_paragraphs(case.description))
+    content = _resolve_content(case, wo)
+    if content:
+        parts.append(_to_html_paragraphs(content))
+    attachments_html = _attachments_html(attachments)
+    if attachments_html:
+        parts.append(attachments_html)
     footer_lines = [f"Salesforce Work Order: {wo.work_order_number}"]
     if wo.priority:
         footer_lines.append(f"Priority: {wo.priority}")
@@ -68,15 +93,23 @@ def build_pms_draft(
     )
 
 
-def build_pms_comment(case: CaseRecord, wo: WorkOrderRecord) -> DraftContent:
+def build_pms_comment(
+    case: CaseRecord,
+    wo: WorkOrderRecord,
+    attachments: list[AttachmentRef] | None = None,
+) -> DraftContent:
     """후속 워크오더용 댓글. 신규 이슈 대신 기존 이슈에 추가 작성한다."""
     title = _resolve_title(case, wo)
     parts = [
         _to_html_paragraphs(
-            f"[후속 워크오더 등록] {wo.work_order_number}\n{title}\n"
+            f"[후속 워크오더 등록] {wo.work_order_number}\n"
             "이전 조치로 해결되지 않아 후속 워크오더가 등록되었습니다."
         )
     ]
-    if case.description:
-        parts.append(_to_html_paragraphs(case.description))
+    content = _resolve_content(case, wo)
+    if content:
+        parts.append(_to_html_paragraphs(content))
+    attachments_html = _attachments_html(attachments)
+    if attachments_html:
+        parts.append(attachments_html)
     return DraftContent(title=title, body="\n<p>&nbsp;</p>\n".join(parts))

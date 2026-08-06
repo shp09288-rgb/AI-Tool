@@ -112,6 +112,8 @@ def test_run_wires_dependencies_and_prints_result(tmp_path: Path, monkeypatch):
     assert seen["sf_client"] == ("https://example.salesforce.com", "sf-token")
     assert seen["pms_connector"][1:] == ("pms-token", "https://pms.parksystems.com")
     assert "Department__c" in seen["sf_adapter"][2]
+    assert "VOC_Title__c" in seen["sf_adapter"][2]
+    assert "Background_Problem__c" in seen["sf_adapter"][2]
     assert seen["run_kwargs"]["idempotency"].path == tmp_path / "idempotency.json"
     assert seen["run_kwargs"]["case_id"] == "500CASE1"
     assert seen["run_kwargs"]["pms_project_id"] == 9
