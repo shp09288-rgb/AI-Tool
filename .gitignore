@@ -9,3 +9,5 @@ data/
 *.egg-info/
 dist/
 build/
+msg.txt
+commit-msg.txt

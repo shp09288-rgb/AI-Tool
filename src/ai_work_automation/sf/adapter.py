@@ -76,22 +76,51 @@ class SalesforceAdapter:
             status=data.get("Status"),
         )
 
+    def _wo_soql_fields(self) -> list[str]:
+        fields = list(self.wo_fields)
+        if "RecordType.Name" not in fields:
+            fields.append("RecordType.Name")
+        return fields
+
+    def _relevant_department_from_row(self, row: dict[str, Any]) -> str | None:
+        standard = {
+            "Id",
+            "WorkOrderNumber",
+            "Subject",
+            "CreatedDate",
+            "CaseId",
+            "Priority",
+            self.activities_field,
+            "RecordType.Name",
+        }
+        for field in self.wo_fields:
+            if field in standard:
+                continue
+            value = row.get(field)
+            if value is not None:
+                return str(value)
+        return None
+
     def get_work_orders_for_case(self, case_id: str) -> list[WorkOrderRecord]:
-        soql = (
-            f"SELECT Id, WorkOrderNumber, Subject, CreatedDate, CaseId, Priority, "
-            f"{self.activities_field}, RecordType.Name FROM WorkOrder WHERE CaseId = '{case_id}'"
-        )
+        field_list = ", ".join(self._wo_soql_fields())
+        soql = f"SELECT {field_list} FROM WorkOrder WHERE CaseId = '{case_id}'"
         data = self.client.query(soql)
         out: list[WorkOrderRecord] = []
         for row in data.get("records", []):
             created = row.get("CreatedDate")
+            activities = (
+                row.get(self.activities_field)
+                if self.activities_field in self.wo_fields
+                else None
+            )
             out.append(
                 WorkOrderRecord(
                     id=row["Id"],
                     work_order_number=row.get("WorkOrderNumber") or "",
                     record_type=(row.get("RecordType") or {}).get("Name") or "",
+                    relevant_department=self._relevant_department_from_row(row),
                     subject=row.get("Subject"),
-                    activities=row.get(self.activities_field),
+                    activities=activities,
                     case_id=row.get("CaseId"),
                     created_date=datetime.fromisoformat(created.replace("Z", "+00:00")) if created else None,
                     priority=row.get("Priority"),
