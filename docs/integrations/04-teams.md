@@ -1,66 +1,66 @@
 # Microsoft Teams
 
-## Role
+## 역할
 
-Channels and related artifacts for:
+다음을 위한 채널·관련 산출물:
 
-- Work Pool-related visibility (if still used alongside Workful)
-- OBQ / QI (MC requests) — share link writeback
-- Issue & VOC tracking (guideline mentioned DISPLAY sheet / aging)
+- Workful과 병행되는 Work Pool 가시성(아직 쓰는 경우)
+- OBQ / QI (MC 요청) — 공유 링크 회수
+- Issue & VOC 추적(지침상 DISPLAY 시트·에이징 언급)
 
-## API availability
+## API 유무
 
-| Capability | Available | API |
-|------------|-----------|-----|
-| Post channel message | Yes | Graph `POST /teams/{id}/channels/{id}/messages` |
-| Chat message | Yes | `/chats/{id}/messages` |
-| SharePoint list item | Yes | `/sites/{id}/lists/{id}/items` |
-| Excel on SharePoint | Yes | Graph Excel APIs (fragile for complex sheets) |
-| Adaptive Card notify | Yes | Via message or Power Automate |
+| 기능 | 가능 여부 | API |
+|------|-----------|-----|
+| 채널 메시지 게시 | 가능 | Graph `POST /teams/{id}/channels/{id}/messages` |
+| 채팅 메시지 | 가능 | `/chats/{id}/messages` |
+| SharePoint 리스트 항목 | 가능 | `/sites/{id}/lists/{id}/items` |
+| SharePoint Excel | 가능 | Graph Excel API (복잡한 시트는 취약) |
+| Adaptive Card 알림 | 가능 | 메시지 또는 Power Automate |
 
-Docs: [Send chatMessage](https://learn.microsoft.com/en-us/graph/api/chatmessage-post)
+문서: [chatMessage 보내기](https://learn.microsoft.com/en-us/graph/api/chatmessage-post)
 
-## Auth
+## 인증
 
-- Entra app: delegated or application permissions (`ChannelMessage.Send`, `Sites.ReadWrite.All`, etc. — least privilege).
-- Admin consent typically required for application permissions.
-- Prefer posting as a dedicated bot/service identity.
+- Entra 앱: 위임 또는 애플리케이션 권한(`ChannelMessage.Send`, `Sites.ReadWrite.All` 등 — 최소 권한).
+- 애플리케이션 권한은 보통 관리자 동의 필요.
+- 전용 봇/서비스 신원으로 게시하는 편을 권장.
 
-## How we connect
+## 연결 방식
 
 ```text
-Router target = teams_obq | teams_voc | teams_notify
-  → resolve teamId + channelId (config)
-  → post message or create list item
-  → return share link / message deep link
-  → SF Activities: "OBQ, QI – {link}" etc.
+라우터 대상 = teams_obq | teams_voc | teams_notify
+  → teamId + channelId (설정)
+  → 메시지 게시 또는 리스트 항목 생성
+  → 공유 링크 / 메시지 딥링크 반환
+  → SF Activities: "OBQ, QI – {link}" 등
 ```
 
-### Issue & VOC sheet caveat
+### Issue & VOC 시트 주의
 
-CRM guideline: only edit `DISPLAY_Issue and VOC list`; aging auto-calculated. If that is a protected Excel sheet:
+CRM 지침: `DISPLAY_Issue and VOC list`만 수정, 에이징 자동 계산. 보호된 Excel이면:
 
-- Prefer **SharePoint list** mirror for API writes, or
-- Power Automate curated flow, or
-- Human Gate produces clipboard/draft for manual paste (fallback).
+- API 쓰기용 **SharePoint 리스트** 미러를 두거나,
+- Power Automate로 정해진 플로만 쓰거나,
+- Human Gate가 수동 붙여넣기용 초안만 제공(폴백).
 
-Hyperlink columns via Graph have known limitations — verify column types before relying on Graph list create.
+Graph로 하이퍼링크 컬럼 생성은 제약이 있을 수 있어, 컬럼 타입을 먼저 확인한다.
 
-## Usage scenarios
+## 활용 시나리오
 
-1. MC / OBQ·QI requests → channel post or list row + link writeback.
-2. Human Gate notifications (“Approve PMS post for Case X”).
-3. Optional notify after Workful/PMS success.
+1. MC / OBQ·QI 요청 → 채널 게시 또는 리스트 행 + 링크 회수.
+2. Human Gate 알림(“Case X PMS 게시 승인”).
+3. Workful/PMS 성공 후 선택 알림.
 
-## Confirm
+## 확인 사항
 
-- [ ] Team/channel IDs for OBQ, QI, Issue&VOC, Work Pool
-- [ ] Artifact type per channel (message vs list vs Excel)
-- [ ] Permission model (delegated user vs app-only)
-- [ ] Whether Workful replaced Teams Work Pool registration
+- [ ] OBQ, QI, Issue&VOC, Work Pool용 team/channel ID
+- [ ] 채널별 산출물 종류(메시지 vs 리스트 vs Excel)
+- [ ] 권한 모델(사용자 위임 vs 앱 전용)
+- [ ] Workful이 Teams Work Pool 등록을 대체했는지
 
-## Risks
+## 위험
 
-- Wrong channel spam — Human Gate mandatory for posts.
-- Excel sheet automation is brittle; avoid as primary path.
-- Application permission to send as app may need Teams policy allowlisting.
+- 잘못된 채널 스팸 — 게시는 Human Gate 필수.
+- Excel 자동화는 깨지기 쉬움 — 주 경로로 쓰지 말 것.
+- 앱으로 메시지 보내기는 Teams 정책 허용이 필요할 수 있음.
