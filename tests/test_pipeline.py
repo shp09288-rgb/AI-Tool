@@ -8,6 +8,7 @@ from ai_work_automation.opt_in import OptInStore
 from ai_work_automation.pipeline import PipelineResult, run_case_automation
 from ai_work_automation.router import RouteRule, RouteWhen
 from ai_work_automation.idempotency import JsonIdempotencyStore
+from ai_work_automation.settings import PmsCustomFieldsConfig
 
 
 def _routes():
@@ -297,6 +298,50 @@ def test_create_passes_tracker_id_and_issue_type(
     )
 
     assert pms.create.call_args.kwargs["tracker_id"] == 2
+
+
+def test_create_passes_custom_fields_to_pms(
+    tmp_path: Path, sample_case, sample_wo_voc_sw
+):
+    opt = OptInStore(tmp_path / "opt.json")
+    opt.select(sample_case.id)
+    log = JobLogStore(tmp_path / "log.jsonl")
+    wo = sample_wo_voc_sw.model_copy(
+        update={"voc_title": "SDC A6 / NX-TSH2326 / [PMS] 오류 발생"}
+    )
+    sf = MagicMock()
+    sf.get_case.return_value = sample_case
+    sf.get_work_orders_for_case.return_value = [wo]
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4800", url="https://pms.example/issues/4800"
+    )
+
+    run_case_automation(
+        case_id=sample_case.id,
+        opt_in=opt,
+        job_log=log,
+        sf=sf,
+        routes=_routes(),
+        pms=pms,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        pms_project_id=1,
+        approve_fn=lambda d: True,
+        idempotency=JsonIdempotencyStore(tmp_path / "idempotency.json"),
+        issue_type="SR",
+        custom_fields_config=PmsCustomFieldsConfig(
+            defaults={"30": "414"},
+            customer_field="17",
+            customer_detail_field="29",
+            customer_map={"SDC": "132"},
+        ),
+    )
+
+    sent = pms.create.call_args.kwargs["custom_fields"]
+    as_dict = {f["id"]: f["value"] for f in sent}
+    assert as_dict[30] == "414"
+    assert as_dict[17] == "132"
+    assert as_dict[29] == "A6"
 
 
 def test_dry_run_comment_includes_wo_attachments(

@@ -12,6 +12,7 @@ from ai_work_automation.models import (
     DraftContent,
     WorkOrderRecord,
 )
+from ai_work_automation.settings import PmsCustomFieldsConfig
 
 TRACKER_ID = {"SR": 1, "ER": 2}
 
@@ -62,11 +63,37 @@ def _attachments_html(attachments: list[AttachmentRef] | None) -> str | None:
     return f"<p>[첨부 파일]</p>\n{links}"
 
 
+def build_custom_fields(
+    title: str,
+    config: PmsCustomFieldsConfig,
+) -> list[dict]:
+    """제목과 설정 규칙으로 PMS 커스텀 필드 값 목록을 만든다.
+
+    제목 규칙 예: "SDC A6 / NX-TSH2326 #1 / [PMS] ..." -> 고객사 SDC, 사이트 A6
+    """
+    fields: dict[int, str] = {
+        int(field_id): value for field_id, value in config.defaults.items()
+    }
+
+    first_segment = title.split("/", 1)[0].strip()
+    tokens = first_segment.split()
+    if tokens and config.customer_field:
+        customer_value = config.customer_map.get(tokens[0])
+        if customer_value is not None:
+            fields[int(config.customer_field)] = customer_value
+            detail = " ".join(tokens[1:]).strip()
+            if detail and config.customer_detail_field:
+                fields[int(config.customer_detail_field)] = detail
+
+    return [{"id": field_id, "value": value} for field_id, value in sorted(fields.items())]
+
+
 def build_pms_draft(
     case: CaseRecord,
     wo: WorkOrderRecord,
     issue_type: str | None = None,
     attachments: list[AttachmentRef] | None = None,
+    custom_fields_config: PmsCustomFieldsConfig | None = None,
 ) -> DraftContent:
     title = _resolve_title(case, wo)
     resolved_type = issue_type or classify_issue_type(title)
@@ -86,10 +113,14 @@ def build_pms_draft(
         footer_lines.append(f"SW ver.: {wo.sw_version}")
     parts.append(_to_html_paragraphs("\n".join(footer_lines)))
 
+    extra: dict = {"tracker_id": TRACKER_ID[resolved_type], "issue_type": resolved_type}
+    if custom_fields_config is not None:
+        extra["custom_fields"] = build_custom_fields(title, custom_fields_config)
+
     return DraftContent(
         title=title,
         body="\n<p>&nbsp;</p>\n".join(parts),
-        extra={"tracker_id": TRACKER_ID[resolved_type], "issue_type": resolved_type},
+        extra=extra,
     )
 
 

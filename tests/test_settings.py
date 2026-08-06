@@ -3,6 +3,45 @@ from pathlib import Path
 from ai_work_automation.settings import load_settings
 
 
+def test_load_settings_parses_pms_custom_fields(tmp_path: Path):
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        """
+automation_enabled_after: "2026-12-01T00:00:00+09:00"
+pms_custom_fields:
+  defaults:
+    "30": "414"
+    "15": "81"
+  customer_field: "17"
+  customer_detail_field: "29"
+  customer_map:
+    LGD: "131"
+    SDC: "132"
+    공통: "143"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(settings_file)
+
+    assert settings.pms_custom_fields.defaults == {"30": "414", "15": "81"}
+    assert settings.pms_custom_fields.customer_field == "17"
+    assert settings.pms_custom_fields.customer_map["SDC"] == "132"
+
+
+def test_load_settings_custom_fields_default_empty(tmp_path: Path):
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        'automation_enabled_after: "2026-12-01T00:00:00+09:00"',
+        encoding="utf-8",
+    )
+
+    settings = load_settings(settings_file)
+
+    assert settings.pms_custom_fields.defaults == {}
+    assert settings.pms_custom_fields.customer_map == {}
+
+
 def test_load_settings_defaults_missing_project_and_department(tmp_path: Path):
     settings_file = tmp_path / "settings.yaml"
     settings_file.write_text(

@@ -12,6 +12,7 @@ from ai_work_automation.job_log import JobLogStore
 from ai_work_automation.models import DraftContent, WorkOrderRecord
 from ai_work_automation.opt_in import OptInStore
 from ai_work_automation.router import RouteRule, resolve_targets
+from ai_work_automation.settings import PmsCustomFieldsConfig
 
 _ISSUE_LINK_RE = re.compile(r"/issues/(\d+)")
 
@@ -57,6 +58,7 @@ def run_case_automation(
     idempotency: JsonIdempotencyStore,
     dry_run: bool = False,
     issue_type: str | None = None,
+    custom_fields_config: PmsCustomFieldsConfig | None = None,
 ) -> PipelineResult:
     if not opt_in.is_selected(case_id):
         result = _skip_result(case_id, "not_selected")
@@ -158,7 +160,13 @@ def run_case_automation(
             )
             continue
 
-        draft = build_pms_draft(case, wo, issue_type=issue_type, attachments=attachments)
+        draft = build_pms_draft(
+            case,
+            wo,
+            issue_type=issue_type,
+            attachments=attachments,
+            custom_fields_config=custom_fields_config,
+        )
 
         if dry_run:
             would_post.append(
@@ -169,6 +177,7 @@ def run_case_automation(
                     "issue_type": draft.extra.get("issue_type"),
                     "title": draft.title,
                     "body": draft.body,
+                    "custom_fields": draft.extra.get("custom_fields"),
                 }
             )
             continue
@@ -187,6 +196,7 @@ def run_case_automation(
             draft,
             project_id=pms_project_id,
             tracker_id=draft.extra.get("tracker_id"),
+            custom_fields=draft.extra.get("custom_fields"),
         )
         if not conn_result.ok:
             job_log.append(

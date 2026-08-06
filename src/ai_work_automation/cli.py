@@ -172,6 +172,7 @@ def run(
             idempotency=idempotency,
             dry_run=s.dry_run if dry_run is None else dry_run,
             issue_type=resolved_type,
+            custom_fields_config=s.pms_custom_fields,
         )
         typer.echo(result.model_dump_json(ensure_ascii=False, indent=2))
     finally:

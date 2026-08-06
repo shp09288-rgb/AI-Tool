@@ -2,7 +2,21 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class PmsCustomFieldsConfig(BaseModel):
+    """PMS 이슈 커스텀 필드 자동 입력 규칙.
+
+    - defaults: 항상 넣는 값 (필드ID -> 값)
+    - customer_field/customer_detail_field: 고객사/사이트 필드 ID
+    - customer_map: 제목 첫 구간의 키워드 -> Customer 필드 값
+    """
+
+    defaults: dict[str, str] = Field(default_factory=dict)
+    customer_field: str | None = None
+    customer_detail_field: str | None = None
+    customer_map: dict[str, str] = Field(default_factory=dict)
 
 
 class Settings(BaseModel):
@@ -18,6 +32,7 @@ class Settings(BaseModel):
     sf_instance_url_env: str = "SF_INSTANCE_URL"
     sf_access_token_env: str = "SF_ACCESS_TOKEN"
     sf_org_alias: str = "parksystems"
+    pms_custom_fields: PmsCustomFieldsConfig = Field(default_factory=PmsCustomFieldsConfig)
     dry_run: bool = False
 
 

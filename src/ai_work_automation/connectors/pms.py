@@ -18,6 +18,7 @@ class PmsConnector:
         project_id: int,
         tracker_id: int | None = None,
         priority_id: int | None = None,
+        custom_fields: list[dict[str, Any]] | None = None,
     ) -> ConnectorResult:
         payload: dict[str, Any] = {
             "issue": {
@@ -30,6 +31,8 @@ class PmsConnector:
             payload["issue"]["tracker_id"] = tracker_id
         if priority_id is not None:
             payload["issue"]["priority_id"] = priority_id
+        if custom_fields:
+            payload["issue"]["custom_fields"] = custom_fields
 
         try:
             response = self.client.post(

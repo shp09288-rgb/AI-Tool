@@ -30,6 +30,30 @@ def test_create_issue_success():
     assert result.url == "https://pms.example/issues/4710"
 
 
+def test_create_issue_sends_custom_fields():
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["issue"]["custom_fields"] == [
+            {"id": 17, "value": "132"},
+            {"id": 30, "value": "414"},
+        ]
+        assert payload["issue"]["tracker_id"] == 1
+        return httpx.Response(201, json={"issue": {"id": 4800}})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(transport=transport, base_url="https://pms.example")
+    connector = PmsConnector(client=client, api_key="secret", base_url="https://pms.example")
+
+    result = connector.create(
+        DraftContent(title="t", body="b"),
+        project_id=1,
+        tracker_id=1,
+        custom_fields=[{"id": 17, "value": "132"}, {"id": 30, "value": "414"}],
+    )
+
+    assert result.ok is True
+
+
 def test_add_comment_success():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "PUT"

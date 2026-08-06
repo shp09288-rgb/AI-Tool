@@ -1,9 +1,61 @@
 from ai_work_automation.draft_template import (
+    build_custom_fields,
     build_pms_comment,
     build_pms_draft,
     classify_issue_type,
 )
 from ai_work_automation.models import AttachmentRef
+from ai_work_automation.settings import PmsCustomFieldsConfig
+
+_CF_CONFIG = PmsCustomFieldsConfig(
+    defaults={"30": "414", "15": "81", "33": "564"},
+    customer_field="17",
+    customer_detail_field="29",
+    customer_map={"LGD": "131", "SDC": "132", "공통": "143"},
+)
+
+
+def test_custom_fields_include_defaults():
+    fields = build_custom_fields("아무 제목", _CF_CONFIG)
+    as_dict = {f["id"]: f["value"] for f in fields}
+    assert as_dict[30] == "414"
+    assert as_dict[15] == "81"
+    assert as_dict[33] == "564"
+
+
+def test_custom_fields_detect_customer_and_detail_from_title():
+    fields = build_custom_fields(
+        "SDC A6 / NX-TSH2326 #1 / [PMS] Shutter 이동시 오류", _CF_CONFIG
+    )
+    as_dict = {f["id"]: f["value"] for f in fields}
+    assert as_dict[17] == "132"  # SDC
+    assert as_dict[29] == "A6"
+
+
+def test_custom_fields_customer_without_detail():
+    fields = build_custom_fields(
+        "공통 / NX-TSH1518, 2225, 2326 / [PMS] Alarm 분기 요청", _CF_CONFIG
+    )
+    as_dict = {f["id"]: f["value"] for f in fields}
+    assert as_dict[17] == "143"  # 공통
+    assert 29 not in as_dict
+
+
+def test_custom_fields_unknown_customer_skips_customer_field():
+    fields = build_custom_fields("AST / NX-TSH600 / [PMS] Servo Off", _CF_CONFIG)
+    as_dict = {f["id"]: f["value"] for f in fields}
+    assert 17 not in as_dict
+
+
+def test_draft_includes_custom_fields_in_extra(sample_case, sample_wo_voc_sw):
+    wo = sample_wo_voc_sw.model_copy(
+        update={"voc_title": "SDC A6 / NX-TSH2326 / [PMS] 오류 발생"}
+    )
+    draft = build_pms_draft(sample_case, wo, issue_type="SR", custom_fields_config=_CF_CONFIG)
+    as_dict = {f["id"]: f["value"] for f in draft.extra["custom_fields"]}
+    assert as_dict[30] == "414"
+    assert as_dict[17] == "132"
+    assert as_dict[29] == "A6"
 
 
 def test_classify_issue_type_er_when_title_is_request():
