@@ -116,6 +116,7 @@ def test_run_wires_dependencies_and_prints_result(tmp_path: Path, monkeypatch):
     assert seen["run_kwargs"]["case_id"] == "500CASE1"
     assert seen["run_kwargs"]["pms_project_id"] == 9
     assert seen["run_kwargs"]["approve_fn"] is not None
+    assert seen["run_kwargs"]["dry_run"] is True  # settings.yaml의 dry_run: true 반영
 
 
 def test_run_falls_back_to_sf_cli_when_env_missing(tmp_path: Path, monkeypatch):

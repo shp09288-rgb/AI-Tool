@@ -105,6 +105,42 @@ def test_skip_wo_with_missing_created_date_before_pms_create(
     sf.append_work_order_activities.assert_not_called()
 
 
+def test_dry_run_builds_draft_but_makes_no_external_calls(
+    tmp_path: Path, sample_case, sample_wo_voc_sw
+):
+    opt = OptInStore(tmp_path / "opt.json")
+    opt.select(sample_case.id)
+    log = JobLogStore(tmp_path / "log.jsonl")
+    sf = MagicMock()
+    sf.get_case.return_value = sample_case
+    sf.get_work_orders_for_case.return_value = [sample_wo_voc_sw]
+    pms = MagicMock()
+
+    result = run_case_automation(
+        case_id=sample_case.id,
+        opt_in=opt,
+        job_log=log,
+        sf=sf,
+        routes=_routes(),
+        pms=pms,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        pms_project_id=1,
+        approve_fn=lambda d: (_ for _ in ()).throw(AssertionError("dry-run에서는 승인 게이트를 호출하면 안 됩니다")),
+        idempotency=JsonIdempotencyStore(tmp_path / "idempotency.json"),
+        dry_run=True,
+    )
+
+    assert result.status == "dry_run"
+    pms.create.assert_not_called()
+    sf.append_work_order_activities.assert_not_called()
+    would_post = result.details["would_post"]
+    assert len(would_post) == 1
+    assert would_post[0]["work_order_id"] == sample_wo_voc_sw.id
+    assert would_post[0]["target"] == "pms"
+    assert would_post[0]["title"]
+    assert would_post[0]["body"]
+
+
 def test_skip_when_idempotency_key_exists(
     tmp_path: Path, sample_case, sample_wo_voc_sw
 ):

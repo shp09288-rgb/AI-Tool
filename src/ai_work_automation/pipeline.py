@@ -36,6 +36,7 @@ def run_case_automation(
     pms_project_id: int,
     approve_fn: Callable[[DraftContent], bool],
     idempotency: JsonIdempotencyStore,
+    dry_run: bool = False,
 ) -> PipelineResult:
     if not opt_in.is_selected(case_id):
         result = _skip_result(case_id, "not_selected")
@@ -50,6 +51,7 @@ def run_case_automation(
 
     work_orders = sf.get_work_orders_for_case(case_id)
     acted: list[dict[str, Any]] = []
+    would_post: list[dict[str, Any]] = []
 
     for wo in work_orders:
         targets = resolve_targets(wo, routes)
@@ -63,6 +65,18 @@ def run_case_automation(
             continue
 
         draft = build_pms_draft(case, wo)
+
+        if dry_run:
+            would_post.append(
+                {
+                    "work_order_id": wo.id,
+                    "target": "pms",
+                    "title": draft.title,
+                    "body": draft.body,
+                }
+            )
+            continue
+
         if not approve_fn(draft):
             job_log.append(
                 {
@@ -114,10 +128,17 @@ def run_case_automation(
         idempotency.record(wo.id, "pms", ref=conn_result.ref, url=conn_result.url)
         acted.append({"work_order_id": wo.id, "url": conn_result.url})
 
-    result = PipelineResult(
-        status="success" if acted else "noop",
-        case_id=case_id,
-        details={"acted": acted},
-    )
+    if dry_run:
+        result = PipelineResult(
+            status="dry_run",
+            case_id=case_id,
+            details={"would_post": would_post},
+        )
+    else:
+        result = PipelineResult(
+            status="success" if acted else "noop",
+            case_id=case_id,
+            details={"acted": acted},
+        )
     job_log.append(result.model_dump())
     return result

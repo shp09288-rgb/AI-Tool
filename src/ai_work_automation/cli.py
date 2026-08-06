@@ -128,6 +128,7 @@ def run(
             pms_project_id=s.pms_project_id,
             approve_fn=approve_fn,
             idempotency=idempotency,
+            dry_run=s.dry_run,
         )
         typer.echo(result.model_dump_json(ensure_ascii=False, indent=2))
     finally:
