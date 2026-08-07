@@ -229,11 +229,12 @@ with tab_scan:
             [
                 {
                     "케이스": r.case_number,
+                    "케이스 담당자": r.case_owner_name,
                     "워크오더": r.work_order_number,
+                    "워크오더 담당자": r.owner_name,
                     "장비": r.asset_name,
                     "SID": r.asset_sid,
                     "상태": r.status,
-                    "담당자": r.owner_name,
                     "제목": r.title,
                     "생성일": r.created_date[:10],
                     "PMS": "연동됨" if r.linked else "미연동",

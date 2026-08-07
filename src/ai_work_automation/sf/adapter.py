@@ -26,6 +26,7 @@ class CandidateWorkOrder(BaseModel):
     asset_sid: str = ""
     status: str = ""
     owner_name: str = ""
+    case_owner_name: str = ""
 
 
 class CaseSearchResult(BaseModel):
@@ -167,10 +168,13 @@ class SalesforceAdapter:
             values = ", ".join(f"'{_soql_escape(v)}'" for v in status_in)
             conditions.append(f"Status IN ({values})")
         if owner_contains.strip():
-            conditions.append(f"Owner.Name LIKE '%{_soql_escape(owner_contains.strip())}%'")
+            name = _soql_escape(owner_contains.strip())
+            conditions.append(
+                f"(Owner.Name LIKE '%{name}%' OR Case.Owner.Name LIKE '%{name}%')"
+            )
 
         soql = (
-            f"SELECT {field_list}, Case.CaseNumber, Case.Subject, "
+            f"SELECT {field_list}, Case.CaseNumber, Case.Subject, Case.Owner.Name, "
             f"Asset.Name, Asset_SID__c, Status, Owner.Name FROM WorkOrder "
             f"WHERE {' AND '.join(conditions)} "
             f"ORDER BY CreatedDate DESC LIMIT {limit}"
@@ -188,6 +192,7 @@ class SalesforceAdapter:
                     asset_sid=row.get("Asset_SID__c") or "",
                     status=row.get("Status") or "",
                     owner_name=(row.get("Owner") or {}).get("Name") or "",
+                    case_owner_name=((case_info.get("Owner") or {}).get("Name")) or "",
                 )
             )
         return out

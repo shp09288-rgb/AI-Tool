@@ -20,6 +20,7 @@ class ScanRow(BaseModel):
     asset_sid: str = ""
     status: str = ""
     owner_name: str = ""
+    case_owner_name: str = ""
     linked: bool
     selected: bool
 
@@ -68,6 +69,7 @@ def scan_candidates(
                 asset_sid=candidate.asset_sid,
                 status=candidate.status,
                 owner_name=candidate.owner_name,
+                case_owner_name=candidate.case_owner_name,
                 linked=bool(_issue_ids_in(wo.activities)),
                 selected=opt_in.is_selected(wo.case_id or ""),
             )

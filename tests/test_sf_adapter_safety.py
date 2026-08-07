@@ -206,7 +206,12 @@ def test_find_recent_voc_work_orders_queries_with_cutoff_and_department():
                 "VOC_Title__c": "SDC A6 / NX / [PMS] 오류",
                 "CreatedDate": "2026-08-06T04:45:32.000+0000",
                 "CaseId": "500CASE9",
-                "Case": {"CaseNumber": "00200750", "Subject": "케이스 제목"},
+                "Case": {
+                    "CaseNumber": "00200750",
+                    "Subject": "케이스 제목",
+                    "Owner": {"Name": "kim case"},
+                },
+                "Owner": {"Name": "lee ethan"},
                 "Asset": {"Name": "NX-TSH2326"},
                 "Asset_SID__c": "D25003-230523",
                 "Status": "New",
@@ -232,6 +237,8 @@ def test_find_recent_voc_work_orders_queries_with_cutoff_and_department():
     assert rows[0].asset_name == "NX-TSH2326"
     assert rows[0].asset_sid == "D25003-230523"
     assert rows[0].status == "New"
+    assert rows[0].owner_name == "lee ethan"
+    assert rows[0].case_owner_name == "kim case"
     soql = client.query.call_args.args[0]
     assert "RecordType.DeveloperName = 'VOC'" in soql
     assert "Relevant_Department__c = 'SW'" in soql
@@ -279,7 +286,8 @@ def test_find_recent_voc_work_orders_groups_asset_or_sid_and_owner():
         "(Asset.Name LIKE '%NX-TSH1518%' OR Asset_SID__c LIKE '%D160025-230523%')"
         in soql
     )
-    assert "Owner.Name LIKE '%이동한%'" in soql
+    # 담당자는 워크오더 소유자 또는 케이스 소유자 중 하나만 맞아도 매칭
+    assert "(Owner.Name LIKE '%이동한%' OR Case.Owner.Name LIKE '%이동한%')" in soql
 
 
 def test_find_recent_voc_work_orders_sid_only_group():
