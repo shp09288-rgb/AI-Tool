@@ -67,6 +67,8 @@ Case (출장 / 현장 대응)
 - [ ] SF에 WO “공식” PDF 첨부/내보내기가 있는지
 - [ ] 사서함: 개인 vs 공유 서비스 사서함
 
+관련: Teams 채널 Field Service / Installation Excel과 메일·SF를 묶는 검토는 [09-teams-excel-outlook-feasibility.md](./09-teams-excel-outlook-feasibility.md).
+
 ## 위험
 
 - 고객에게 자동 발송은 위험 — 초안만 유지.

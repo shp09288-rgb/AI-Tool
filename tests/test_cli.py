@@ -78,7 +78,7 @@ def test_run_wires_dependencies_and_prints_result(tmp_path: Path, monkeypatch):
             seen["sf_client_closed"] = True
 
     class FakeSFAdapter:
-        def __init__(self, *, client, cutoff, wo_fields=None) -> None:
+        def __init__(self, *, client, cutoff, wo_fields=None, **kwargs) -> None:
             seen["sf_adapter"] = (client, cutoff, wo_fields)
 
     class FakeHTTPXClient:
@@ -137,7 +137,7 @@ def _patch_run_fakes(monkeypatch, seen: dict):
             pass
 
     class FakeSFAdapter:
-        def __init__(self, *, client, cutoff, wo_fields=None) -> None:
+        def __init__(self, *, client, cutoff, wo_fields=None, **kwargs) -> None:
             pass
 
         def find_case_id_by_number(self, case_number: str) -> str | None:
@@ -281,7 +281,7 @@ def test_run_falls_back_to_sf_cli_when_env_missing(tmp_path: Path, monkeypatch):
             pass
 
     class FakeSFAdapter:
-        def __init__(self, *, client, cutoff, wo_fields=None) -> None:
+        def __init__(self, *, client, cutoff, wo_fields=None, **kwargs) -> None:
             pass
 
     class FakeHTTPXClient:

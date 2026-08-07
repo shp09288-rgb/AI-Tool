@@ -68,5 +68,6 @@ Case (사용자 옵트인, 배포 이후만)
 | [06-release-notes.md](./06-release-notes.md) | 버전 메일 → RN 업데이트 |
 | [07-routing-matrix.md](./07-routing-matrix.md) | 수정 가능한 라우팅 표 |
 | [08-priority-recommendation.md](./08-priority-recommendation.md) | 구현 우선순위 제안 |
+| [09-teams-excel-outlook-feasibility.md](./09-teams-excel-outlook-feasibility.md) | DFS2 Installation/FSR Excel ↔ SF ↔ Outlook 초안 실현 가능성 |
 
 통합 설계: `docs/superpowers/specs/2026-08-06-ai-work-automation-design.md`

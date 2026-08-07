@@ -1,4 +1,7 @@
-from datetime import datetime
+import re
+from dataclasses import dataclass
+from datetime import date, datetime
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -10,6 +13,41 @@ from ai_work_automation.sf.client import SalesforceHttpClient
 
 class SafetyError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class ExistingTechnicalServiceWo:
+    id: str
+    work_order_number: str
+    case_id: str
+    start_date: str | None = None
+
+
+_SF_TZ_RE = re.compile(r"([+-])(\d{2})(\d{2})$")
+
+
+def start_date_matches_day(start_raw: object, work_day: date) -> bool:
+    """WO StartDate가 작업일(로컬 날짜)과 같은지."""
+    if start_raw is None:
+        return False
+    text = str(start_raw).strip()
+    if not text:
+        return False
+    # 2026-08-07T09:30:00.000+0900 / ...Z
+    normalized = text.replace("Z", "+00:00")
+    m = _SF_TZ_RE.search(normalized)
+    if m and ":" not in normalized[m.start() :]:
+        normalized = (
+            normalized[: m.start()] + f"{m.group(1)}{m.group(2)}:{m.group(3)}"
+        )
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        try:
+            dt = datetime.fromisoformat(normalized[:19])
+        except ValueError:
+            return False
+    return dt.date() == work_day
 
 
 def _soql_escape(value: str) -> str:
@@ -44,10 +82,14 @@ class SalesforceAdapter:
         activities_field: str = "VOC_Activities__c",
         case_fields: list[str] | None = None,
         wo_fields: list[str] | None = None,
+        case_activities_field: str = "Activities__c",
+        technical_service_record_type_id: str | None = None,
     ) -> None:
         self.client = client
         self.cutoff = cutoff
         self.activities_field = activities_field
+        self.case_activities_field = case_activities_field
+        self.technical_service_record_type_id = technical_service_record_type_id
         self.case_fields = case_fields or [
             "Id",
             "CaseNumber",
@@ -55,7 +97,10 @@ class SalesforceAdapter:
             "Description",
             "CreatedDate",
             "Status",
+            case_activities_field,
         ]
+        if case_activities_field not in self.case_fields:
+            self.case_fields = [*self.case_fields, case_activities_field]
         self.wo_fields = wo_fields or [
             "Id",
             "WorkOrderNumber",
@@ -285,4 +330,109 @@ class SalesforceAdapter:
         soql = f"SELECT {field_list} FROM WorkOrder WHERE CaseId = '{case_id}'"
         data = self.client.query(soql)
         return [self._row_to_work_order(row) for row in data.get("records", [])]
+
+    def find_technical_service_wos_on_day(
+        self, case_id: str, work_day: date
+    ) -> list[ExistingTechnicalServiceWo]:
+        """같은 Case + Technical Service + StartDate 날짜=작업일인 WO."""
+        rt = self.technical_service_record_type_id
+        soql = (
+            "SELECT Id, WorkOrderNumber, StartDate, RecordTypeId "
+            f"FROM WorkOrder WHERE CaseId = '{_soql_escape(case_id)}'"
+        )
+        if rt:
+            soql += f" AND RecordTypeId = '{_soql_escape(rt)}'"
+        rows = self.client.query(soql).get("records", [])
+        out: list[ExistingTechnicalServiceWo] = []
+        for row in rows:
+            if not start_date_matches_day(row.get("StartDate"), work_day):
+                continue
+            out.append(
+                ExistingTechnicalServiceWo(
+                    id=row["Id"],
+                    work_order_number=str(row.get("WorkOrderNumber") or ""),
+                    case_id=case_id,
+                    start_date=row.get("StartDate"),
+                )
+            )
+        return out
+
+    def append_case_activities(
+        self,
+        case_id: str,
+        line: str,
+        *,
+        case_selected: bool,
+        enforce_cutoff: bool = True,
+    ) -> None:
+        if not case_selected:
+            raise SafetyError("옵트인되지 않은 Case는 수정할 수 없습니다")
+        data = self.client.get_sobject("Case", case_id, self.case_fields)
+        created = datetime.fromisoformat(data["CreatedDate"].replace("Z", "+00:00"))
+        # 출장 보고처럼 사용자가 명시한 Case는 컷오프와 무관하게 Activity 기록이 필요함
+        if enforce_cutoff and not is_after_cutoff(created, self.cutoff):
+            raise SafetyError("컷오프 이전 Case는 수정할 수 없습니다")
+        field = self.case_activities_field
+        # 실무: Case Activities는 맨 위가 최신 — 새 줄을 앞에 붙인다(기존 삭제 없음).
+        existing = (data.get(field) or "").lstrip("\n")
+        new_value = f"{line}\n{existing}" if existing else line
+        self.client.patch_sobject(
+            "Case",
+            case_id,
+            {field: new_value},
+        )
+
+    def get_case_number(self, case_id: str) -> str | None:
+        data = self.client.get_sobject("Case", case_id, ["Id", "CaseNumber"])
+        num = data.get("CaseNumber")
+        return str(num) if num else None
+
+    def get_work_order_number(self, work_order_id: str) -> str | None:
+        data = self.client.get_sobject(
+            "WorkOrder", work_order_id, ["Id", "WorkOrderNumber"]
+        )
+        num = data.get("WorkOrderNumber")
+        return str(num) if num else None
+
+    def create_technical_service_work_order(
+        self,
+        *,
+        case_id: str,
+        subject: str,
+        description: str | None = None,
+        status: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        extra_fields: dict[str, Any] | None = None,
+    ) -> str:
+        if not self.technical_service_record_type_id:
+            raise SafetyError("technical_service_record_type_id 설정이 없습니다")
+        body: dict[str, Any] = {
+            "RecordTypeId": self.technical_service_record_type_id,
+            "CaseId": case_id,
+            "Subject": subject,
+        }
+        if description:
+            body["Description"] = description
+        if status:
+            body["Status"] = status
+        if start_date:
+            body["StartDate"] = start_date
+        if end_date:
+            body["EndDate"] = end_date
+        if extra_fields:
+            body.update(extra_fields)
+        result = self.client.post_sobject("WorkOrder", body)
+        return result["id"]
+
+    def attach_file_to_record(self, record_id: str, file_path: Path, *, title: str | None = None) -> str:
+        data = Path(file_path).read_bytes()
+        name = Path(file_path).name
+        result = self.client.create_content_version_from_bytes(
+            title=title or Path(file_path).stem,
+            path_on_client=name,
+            first_publish_location_id=record_id,
+            data=data,
+        )
+        return result["id"]
 

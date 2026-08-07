@@ -14,3 +14,10 @@ build/
 msg.txt
 commit-msg.txt
 config/settings.yaml
+docs/integrations/_samples/
+.cursor/
+output/
+reference/
+_onedrive_spike.py
+*.xlsx
+!tests/**/*.xlsx

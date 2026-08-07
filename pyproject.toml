@@ -12,7 +12,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-mock>=3.12"]
-ui = ["streamlit>=1.36", "msal>=1.28"]
+ui = [
+  "streamlit>=1.36",
+  "msal>=1.28",
+  "streamlit-quill>=0.0.3",
+  "pywin32>=306; platform_system=='Windows'",
+  "Pillow>=10.0",
+  "pymupdf>=1.24",
+]
 
 [project.scripts]
 ai-work = "ai_work_automation.cli:app"

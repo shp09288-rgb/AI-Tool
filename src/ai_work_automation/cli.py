@@ -17,7 +17,6 @@ from ai_work_automation.pipeline import run_case_automation
 from ai_work_automation.router import load_routes
 from ai_work_automation.services import scan_candidates, status_overview
 from ai_work_automation.settings import load_settings
-from ai_work_automation.sf.adapter import SalesforceAdapter
 from ai_work_automation.sf.client import SalesforceHttpClient
 from ai_work_automation.sf.token_provider import resolve_sf_credentials
 
@@ -37,7 +36,10 @@ def _require_env(name: str) -> str:
         raise typer.BadParameter(f"필수 환경변수 누락: {name}") from exc
 
 
-def _make_sf_adapter(s) -> tuple[SalesforceHttpClient, SalesforceAdapter]:
+def _make_sf_adapter(s):
+    # 지연 임포트: Streamlit이 adapter를 reload한 뒤에도 최신 클래스를 쓰게 함
+    from ai_work_automation.sf.adapter import SalesforceAdapter
+
     # 환경변수에 없으면 로그인된 sf CLI에서 토큰을 자동으로 가져온다
     sf_instance_url, sf_access_token = resolve_sf_credentials(
         os.environ.get(s.sf_instance_url_env),
@@ -60,6 +62,8 @@ def _make_sf_adapter(s) -> tuple[SalesforceHttpClient, SalesforceAdapter]:
             s.wo_department_field,
             "VOC_Activities__c",
         ],
+        case_activities_field=s.field_report.case_activities_field,
+        technical_service_record_type_id=s.field_report.technical_service_record_type_id,
     )
     return sf_client, adapter
 

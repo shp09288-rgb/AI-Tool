@@ -60,6 +60,7 @@ def run_case_automation(
     issue_type: str | None = None,
     custom_fields_config: PmsCustomFieldsConfig | None = None,
     only_work_order_ids: set[str] | None = None,
+    draft_overrides: dict[str, dict[str, str]] | None = None,
 ) -> PipelineResult:
     if not opt_in.is_selected(case_id):
         result = _skip_result(case_id, "not_selected")
@@ -117,9 +118,18 @@ def run_case_automation(
 
         attachments = sf.get_attachments(wo.id)
 
+        override = (draft_overrides or {}).get(wo.id)
+
         # 같은 케이스에 이미 PMS 이슈가 있으면 신규 생성 대신 그 이슈에 댓글
         if existing_issue is not None:
             comment = build_pms_comment(case, wo, attachments=attachments)
+            if override:
+                comment = comment.model_copy(
+                    update={
+                        "title": override.get("title", comment.title),
+                        "body": override.get("body", comment.body),
+                    }
+                )
 
             if dry_run:
                 would_post.append(
@@ -171,6 +181,13 @@ def run_case_automation(
             attachments=attachments,
             custom_fields_config=custom_fields_config,
         )
+        if override:
+            draft = draft.model_copy(
+                update={
+                    "title": override.get("title", draft.title),
+                    "body": override.get("body", draft.body),
+                }
+            )
 
         if dry_run:
             would_post.append(

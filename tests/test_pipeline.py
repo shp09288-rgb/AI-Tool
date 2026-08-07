@@ -337,6 +337,47 @@ def test_only_work_order_ids_restricts_processing(
     assert [a["work_order_id"] for a in acted] == ["0WOB"]
 
 
+def test_draft_overrides_replace_title_and_body(
+    tmp_path: Path, sample_case, sample_wo_voc_sw
+):
+    """UI에서 편집한 제목/본문이 있으면 그것으로 등록하되, 트래커 등은 유지."""
+    opt = OptInStore(tmp_path / "opt.json")
+    opt.select(sample_case.id)
+    log = JobLogStore(tmp_path / "log.jsonl")
+    sf = MagicMock()
+    sf.get_case.return_value = sample_case
+    sf.get_work_orders_for_case.return_value = [sample_wo_voc_sw]
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="5000", url="https://pms.example/issues/5000"
+    )
+
+    run_case_automation(
+        case_id=sample_case.id,
+        opt_in=opt,
+        job_log=log,
+        sf=sf,
+        routes=_routes(),
+        pms=pms,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        pms_project_id=1,
+        approve_fn=lambda d: True,
+        idempotency=JsonIdempotencyStore(tmp_path / "idempotency.json"),
+        issue_type="SR",
+        draft_overrides={
+            sample_wo_voc_sw.id: {
+                "title": "편집된 제목",
+                "body": "<p>편집된 본문</p>",
+            }
+        },
+    )
+
+    sent_draft = pms.create.call_args.args[0]
+    assert sent_draft.title == "편집된 제목"
+    assert sent_draft.body == "<p>편집된 본문</p>"
+    assert pms.create.call_args.kwargs["tracker_id"] == 1  # SR 트래커 유지
+
+
 def test_create_passes_custom_fields_to_pms(
     tmp_path: Path, sample_case, sample_wo_voc_sw
 ):

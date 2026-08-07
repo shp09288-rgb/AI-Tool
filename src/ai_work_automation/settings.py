@@ -31,6 +31,26 @@ class ScanFiltersConfig(BaseModel):
     owner_contains: str = ""
 
 
+class FieldReportConfig(BaseModel):
+    """로컬 DFS2 출장 보고 → SF Case/WO."""
+
+    case_activities_field: str = "Activities__c"
+    technical_service_record_type_id: str = "0120o000001lQJ5AAM"
+    case_id_cell: str = "T9"
+    fse_name_cell: str = "V5"
+    report_date_cell: str = "V4"
+    summary_cell: str = "B23"
+    start_date_cell: str = "L11"
+    start_time_cell: str = "L12"
+    end_time_cell: str = "L13"
+    # Work Order 기본값 (API picklist value)
+    default_status: str = "Completed"
+    default_equipment_survey: str = "비대상"  # Field25__c
+    default_survey: str = "설문 비대상"  # Survey_1__c
+    equipment_survey_field: str = "Field25__c"
+    survey_field: str = "Survey_1__c"
+
+
 class Settings(BaseModel):
     automation_enabled_after: datetime
     opt_in_path: Path = Path("data/opt_in.json")
@@ -46,6 +66,8 @@ class Settings(BaseModel):
     sf_org_alias: str = "parksystems"
     pms_custom_fields: PmsCustomFieldsConfig = Field(default_factory=PmsCustomFieldsConfig)
     scan_filters: ScanFiltersConfig = Field(default_factory=ScanFiltersConfig)
+    field_report_root: Path | None = None
+    field_report: FieldReportConfig = Field(default_factory=FieldReportConfig)
     dry_run: bool = False
 
 
