@@ -17,6 +17,7 @@ config/settings.yaml
 docs/integrations/_samples/
 .cursor/
 output/
+logs/
 reference/
 _onedrive_spike.py
 *.xlsx
