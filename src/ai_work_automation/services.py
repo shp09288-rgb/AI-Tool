@@ -19,6 +19,7 @@ class ScanRow(BaseModel):
     asset_name: str = ""
     asset_sid: str = ""
     status: str = ""
+    owner_name: str = ""
     linked: bool
     selected: bool
 
@@ -39,14 +40,18 @@ def scan_candidates(
     opt_in: OptInStore,
     department: str = "SW",
     asset_contains: list[str] | None = None,
+    sid_contains: list[str] | None = None,
     status_in: list[str] | None = None,
+    owner_contains: str = "",
 ) -> list[ScanRow]:
     """컷오프 이후 생성된 VOC+부서 워크오더 목록 (PMS 연동 여부/선택 여부 포함)."""
     rows: list[ScanRow] = []
     candidates = sf.find_recent_voc_work_orders(
         department=department,
         asset_contains=asset_contains or [],
+        sid_contains=sid_contains or [],
         status_in=status_in or [],
+        owner_contains=owner_contains,
     )
     for candidate in candidates:
         wo = candidate.work_order
@@ -62,6 +67,7 @@ def scan_candidates(
                 asset_name=candidate.asset_name,
                 asset_sid=candidate.asset_sid,
                 status=candidate.status,
+                owner_name=candidate.owner_name,
                 linked=bool(_issue_ids_in(wo.activities)),
                 selected=opt_in.is_selected(wo.case_id or ""),
             )

@@ -258,6 +258,46 @@ def test_find_recent_voc_work_orders_applies_asset_and_status_filters():
     assert "Status IN ('New', 'In Progress')" in soql
 
 
+def test_find_recent_voc_work_orders_groups_asset_or_sid_and_owner():
+    """SF 리포트처럼 (장비 OR SID) AND 담당자 구조여야 한다."""
+    client = MagicMock()
+    client.query.return_value = {"records": []}
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+    adapter.find_recent_voc_work_orders(
+        department="SW",
+        asset_contains=["NX-TSH1518"],
+        sid_contains=["D160025-230523"],
+        owner_contains="이동한",
+    )
+
+    soql = client.query.call_args.args[0]
+    assert (
+        "(Asset.Name LIKE '%NX-TSH1518%' OR Asset_SID__c LIKE '%D160025-230523%')"
+        in soql
+    )
+    assert "Owner.Name LIKE '%이동한%'" in soql
+
+
+def test_find_recent_voc_work_orders_sid_only_group():
+    client = MagicMock()
+    client.query.return_value = {"records": []}
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+
+    adapter.find_recent_voc_work_orders(department="SW", sid_contains=["D25003"])
+
+    soql = client.query.call_args.args[0]
+    assert "(Asset_SID__c LIKE '%D25003%')" in soql
+    where_clause = soql.split("WHERE")[1]
+    assert "Owner.Name LIKE" not in where_clause
+
+
 def test_search_cases_by_number_or_subject():
     client = MagicMock()
     client.query.return_value = {

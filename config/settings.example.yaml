@@ -20,7 +20,10 @@ sf_org_alias: parksystems
 #     SDC: "132"
 #     공통: "143"
 # 스캔 기본 필터 (선택. 비우면 전체)
+# 조건 결합: (asset_contains OR sid_contains) AND status_in AND owner_contains
 # scan_filters:
 #   asset_contains: [NX-TSH1518, NX-TSH2225, NX-TSH2326]
+#   sid_contains: [D160025-230523]
 #   status_in: [New, Internal Review, In Progress]
+#   owner_contains: 홍길동
 dry_run: true

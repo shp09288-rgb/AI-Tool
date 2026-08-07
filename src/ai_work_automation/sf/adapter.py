@@ -25,6 +25,7 @@ class CandidateWorkOrder(BaseModel):
     asset_name: str = ""
     asset_sid: str = ""
     status: str = ""
+    owner_name: str = ""
 
 
 class CaseSearchResult(BaseModel):
@@ -138,10 +139,15 @@ class SalesforceAdapter:
         self,
         department: str,
         asset_contains: list[str] | None = None,
+        sid_contains: list[str] | None = None,
         status_in: list[str] | None = None,
+        owner_contains: str = "",
         limit: int = 50,
     ) -> list[CandidateWorkOrder]:
-        """컷오프 이후 생성된 VOC 워크오더 중 지정 부서의 것을 최신순으로 조회한다."""
+        """컷오프 이후 생성된 VOC 워크오더를 최신순으로 조회한다.
+
+        조건 결합(SF 리포트와 동일): (장비 OR SID) AND 상태 AND 담당자 AND 부서
+        """
         field_list = ", ".join(self._wo_soql_fields())
         cutoff_str = self.cutoff.isoformat()
         conditions = [
@@ -149,18 +155,23 @@ class SalesforceAdapter:
             f"{self.wo_department_soql_field()} = '{department}'",
             f"CreatedDate > {cutoff_str}",
         ]
-        if asset_contains:
-            likes = " OR ".join(
-                f"Asset.Name LIKE '%{_soql_escape(kw)}%'" for kw in asset_contains
-            )
-            conditions.append(f"({likes})")
+        # 장비명과 SID는 하나의 OR 그룹으로 묶는다
+        group_likes = [
+            f"Asset.Name LIKE '%{_soql_escape(kw)}%'" for kw in (asset_contains or [])
+        ] + [
+            f"Asset_SID__c LIKE '%{_soql_escape(kw)}%'" for kw in (sid_contains or [])
+        ]
+        if group_likes:
+            conditions.append(f"({' OR '.join(group_likes)})")
         if status_in:
             values = ", ".join(f"'{_soql_escape(v)}'" for v in status_in)
             conditions.append(f"Status IN ({values})")
+        if owner_contains.strip():
+            conditions.append(f"Owner.Name LIKE '%{_soql_escape(owner_contains.strip())}%'")
 
         soql = (
             f"SELECT {field_list}, Case.CaseNumber, Case.Subject, "
-            f"Asset.Name, Asset_SID__c, Status FROM WorkOrder "
+            f"Asset.Name, Asset_SID__c, Status, Owner.Name FROM WorkOrder "
             f"WHERE {' AND '.join(conditions)} "
             f"ORDER BY CreatedDate DESC LIMIT {limit}"
         )
@@ -176,6 +187,7 @@ class SalesforceAdapter:
                     asset_name=(row.get("Asset") or {}).get("Name") or "",
                     asset_sid=row.get("Asset_SID__c") or "",
                     status=row.get("Status") or "",
+                    owner_name=(row.get("Owner") or {}).get("Name") or "",
                 )
             )
         return out

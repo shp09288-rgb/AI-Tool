@@ -174,12 +174,25 @@ with st.sidebar:
         height=100,
     )
     asset_contains = [line.strip() for line in asset_text.splitlines() if line.strip()]
+    sid_text = st.text_area(
+        "SID 포함 (한 줄에 하나, 장비명과 OR 조건)",
+        value="\n".join(s.scan_filters.sid_contains),
+        height=68,
+    )
+    sid_contains = [line.strip() for line in sid_text.splitlines() if line.strip()]
     status_in = st.multiselect(
         "워크오더 상태 (비우면 전체)",
         options=sorted(set(STATUS_OPTIONS + s.scan_filters.status_in)),
         default=s.scan_filters.status_in,
     )
-    st.caption("기본값은 config/settings.yaml 의 scan_filters 에서 관리")
+    owner_contains = st.text_input(
+        "담당자 이름 포함 (AND 조건, 비우면 전체)",
+        value=s.scan_filters.owner_contains,
+    )
+    st.caption(
+        "조건 결합: (장비명 OR SID) AND 상태 AND 담당자. "
+        "기본값은 config/settings.yaml 의 scan_filters 에서 관리"
+    )
     st.divider()
     st.markdown(f"**컷오프**: {s.automation_enabled_after:%Y-%m-%d %H:%M}")
     st.markdown(f"**PMS 프로젝트**: {s.pms_project_id} (XEA Request)")
@@ -197,7 +210,9 @@ with tab_scan:
                     OptInStore(s.opt_in_path),
                     department=department,
                     asset_contains=asset_contains,
+                    sid_contains=sid_contains,
                     status_in=status_in,
+                    owner_contains=owner_contains,
                 )
             finally:
                 sf_client.close()
@@ -215,6 +230,7 @@ with tab_scan:
                     "장비": r.asset_name,
                     "SID": r.asset_sid,
                     "상태": r.status,
+                    "담당자": r.owner_name,
                     "제목": r.title,
                     "생성일": r.created_date[:10],
                     "PMS": "연동됨" if r.linked else "미연동",

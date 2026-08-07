@@ -36,7 +36,9 @@ def test_load_settings_parses_scan_filters(tmp_path: Path):
 automation_enabled_after: "2026-12-01T00:00:00+09:00"
 scan_filters:
   asset_contains: [NX-TSH1518, NX-TSH2225]
+  sid_contains: [D160025-230523]
   status_in: [New, In Progress]
+  owner_contains: 이동한
 """.strip(),
         encoding="utf-8",
     )
@@ -44,7 +46,9 @@ scan_filters:
     settings = load_settings(settings_file)
 
     assert settings.scan_filters.asset_contains == ["NX-TSH1518", "NX-TSH2225"]
+    assert settings.scan_filters.sid_contains == ["D160025-230523"]
     assert settings.scan_filters.status_in == ["New", "In Progress"]
+    assert settings.scan_filters.owner_contains == "이동한"
 
 
 def test_load_settings_scan_filters_default_empty(tmp_path: Path):

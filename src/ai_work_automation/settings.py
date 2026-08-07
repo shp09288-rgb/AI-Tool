@@ -20,10 +20,15 @@ class PmsCustomFieldsConfig(BaseModel):
 
 
 class ScanFiltersConfig(BaseModel):
-    """스캔 기본 필터. 비어 있으면 조건을 적용하지 않는다."""
+    """스캔 기본 필터. 비어 있으면 조건을 적용하지 않는다.
+
+    조건 결합: (asset_contains OR sid_contains) AND status_in AND owner_contains
+    """
 
     asset_contains: list[str] = Field(default_factory=list)
+    sid_contains: list[str] = Field(default_factory=list)
     status_in: list[str] = Field(default_factory=list)
+    owner_contains: str = ""
 
 
 class Settings(BaseModel):

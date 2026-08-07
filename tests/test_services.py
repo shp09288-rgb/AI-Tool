@@ -46,7 +46,9 @@ def test_scan_candidates_marks_linked_and_selected(tmp_path: Path):
         opt,
         department="SW",
         asset_contains=["NX-TSH2326"],
+        sid_contains=["D25003"],
         status_in=["New"],
+        owner_contains="이동한",
     )
 
     assert len(rows) == 2
@@ -61,7 +63,11 @@ def test_scan_candidates_marks_linked_and_selected(tmp_path: Path):
     assert second.linked is True
     assert second.selected is False
     sf.find_recent_voc_work_orders.assert_called_once_with(
-        department="SW", asset_contains=["NX-TSH2326"], status_in=["New"]
+        department="SW",
+        asset_contains=["NX-TSH2326"],
+        sid_contains=["D25003"],
+        status_in=["New"],
+        owner_contains="이동한",
     )
 
 

@@ -135,7 +135,9 @@ def scan(
             opt,
             department=department,
             asset_contains=s.scan_filters.asset_contains,
+            sid_contains=s.scan_filters.sid_contains,
             status_in=s.scan_filters.status_in,
+            owner_contains=s.scan_filters.owner_contains,
         )
     finally:
         sf_client.close()
