@@ -101,9 +101,12 @@ def _render_would_post(items: list[dict]) -> None:
                 + ", ".join(f"{f['id']}={f['value']}" for f in item["custom_fields"])
             )
         st.markdown("**본문 미리보기**:")
+        # 시스템 다크 테마와 무관하게 항상 흰 배경 + 검정 글자로 고정 (실제 PMS 화면과 동일)
         components.html(
-            f'<div style="border:1px solid #ddd;border-radius:6px;'
-            f'padding:12px;font-family:sans-serif">{item["body"]}</div>',
+            '<div style="background:#ffffff;color:#1a1a1a;'
+            'border:1px solid #ccc;border-radius:6px;padding:14px;'
+            "font-family:'Malgun Gothic',sans-serif;font-size:14px;line-height:1.6\">"
+            f'{item["body"]}</div>',
             height=280,
             scrolling=True,
         )
