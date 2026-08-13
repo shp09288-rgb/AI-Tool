@@ -1325,7 +1325,12 @@ def _render_settings_tab() -> None:
     root_val = str(s.field_report_root) if s.field_report_root else ""
     field_root = st.text_input("field_report_root (DFS2 경로)", value=root_val)
     dry_run = st.toggle("dry_run", value=s.dry_run)
-    org_alias = st.text_input("sf_org_alias", value=s.sf_org_alias)
+    pending_org_alias = st.session_state.pop("settings_sf_org_alias_pending", None)
+    if pending_org_alias is not None:
+        st.session_state["settings_sf_org_alias"] = pending_org_alias
+    elif "settings_sf_org_alias" not in st.session_state:
+        st.session_state["settings_sf_org_alias"] = s.sf_org_alias
+    org_alias = st.text_input("sf_org_alias", key="settings_sf_org_alias")
     if field_root.strip():
         exists = Path(field_root.strip()).exists()
         st.caption("경로: " + ("존재함" if exists else "없음(동기화/경로 확인)"))
@@ -1393,6 +1398,7 @@ def _render_settings_tab() -> None:
                 except Exception:
                     st.error("설정 저장에 실패했습니다.")
                 else:
+                    st.session_state["settings_sf_org_alias_pending"] = row.alias
                     _refresh_sf_session(row.alias)
                     st.success(f"{row.alias} 계정을 사용합니다.")
                     st.rerun()
