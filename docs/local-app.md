@@ -3,7 +3,8 @@
 본인 PC에서 아이콘 한 번으로 Streamlit UI(`http://localhost:8501`)를 띄우는 방법입니다.  
 Tailscale 허브(`0.0.0.0`)와는 **별도**입니다. 허브는 [docs/hub-autostart.md](hub-autostart.md) 참고.
 
-**클린 PC / 처음 설치:** [local-app-first-run.md](local-app-first-run.md) 를 먼저 보세요.
+**클린 PC / 처음 설치:** [local-app-first-run.md](local-app-first-run.md) 를 먼저 보세요.  
+**명령이 어려우면:** [AI-설치요청-프롬프트.md](../AI-설치요청-프롬프트.md) 를 AI 채팅에 붙여 넣으세요.
 
 ## 1회 준비
 
