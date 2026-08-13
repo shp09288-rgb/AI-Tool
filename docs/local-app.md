@@ -60,9 +60,38 @@ powershell -ExecutionPolicy Bypass -File scripts\register-local-app-shortcut.ps1
 2. 수 초 후 브라우저에서 `http://localhost:8501`이 열린다.
 3. **설정** 탭에서 PMS API 키·출장보고 경로·dry_run·SF org alias를 확인·저장한다.
 4. SF가 미연결이면 **설정** 탭의 「로그인」으로 브라우저 로그인한 뒤 다시 확인한다.
-5. **VOC 작성** 탭: Quill에 붙여넣거나 이미지를 업로드한다. 업로드 후 expander에서 left/top/right/bottom으로 선택 크롭한다. 결과는 PMS 본문(base64 `<img>`)과 SF Case/WO 파일 첨부(best-effort)에 들어간다. 크롭은 기존 `Pillow`(ui extra) 슬라이더이며 `streamlit-cropper`는 쓰지 않는다.
+5. **VOC 작성** 탭에서 신규 Case 또는 기존 Case로 VOC를 만든다 (아래 「VOC 작성」).
+6. 이미 열린 VOC를 일괄 후처리하려면 **VOC→PMS** 스캔 탭을 쓴다 (기존과 동일).
 
 이미 서버가 떠 있으면 프로세스를 죽이지 않고 브라우저만 다시 엽니다.
+
+## VOC 작성
+
+Tool에서 제목·본문을 쓰고 **승인 실행**하면 Salesforce Case / VOC WO와 PMS까지 이어서 처리한다.  
+본문 편집기는 **PMS용 HTML**이다. SF Case/WO에는 제목·요약·필드만 쓰고, 이미지는 가능하면 **파일 첨부**로 올라간다.
+
+### 모드
+
+| 모드 | 동작 |
+|------|------|
+| **신규 Case** | Case 생성 → VOC WO 생성 → PMS 이슈 생성 → WO Activities에 `PMS – {url}` |
+| **기존 Case** | Case 번호로 조회 → 그 Case에 VOC WO 추가 → 아래 댓글 규칙 |
+
+**댓글 규칙:** Case 또는 기존 VOC WO Activities에 PMS 링크(이슈 ID)가 있으면 **신규 이슈를 만들지 않고 댓글**을 단다. 없으면 **이슈 생성**. (VOC→PMS 스캔과 같은 규칙)
+
+### 본문·이미지
+
+1. Quill에 텍스트·이미지를 붙여 넣거나, 「이미지 첨부」로 파일을 올린다.
+2. 업로드 후 expander에서 left/top/right/bottom 픽셀로 **선택 크롭**한다. 「이 이미지 크롭 적용」을 켜야 반영된다.
+3. 결과는 PMS 본문(base64 `<img>`)과 SF Case/WO 파일 첨부(best-effort)에 들어간다.
+4. 크롭은 기존 `Pillow`(ui extra) 숫자 입력이다. `streamlit-cropper`는 쓰지 않는다.
+
+### 미리보기 / 승인
+
+- **미리보기:** 원격 쓰기 없이 페이로드만 확인한다.
+- **승인 실행:** 실제 생성. **설정** 탭의 `dry_run`이 켜져 있으면 승인해도 Salesforce/PMS에 쓰지 않는다.
+
+기존 **VOC→PMS** 스캔 탭은 그대로 둔다 (후처리·일괄용).
 
 ## hub와 동시 사용 금지
 
