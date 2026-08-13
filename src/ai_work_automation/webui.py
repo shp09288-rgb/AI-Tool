@@ -27,12 +27,14 @@ import ai_work_automation.field_report.mail_template as _fr_mail_template
 import ai_work_automation.field_report.outlook_com as _fr_outlook
 import ai_work_automation.field_report.pipeline as _fr_pipeline
 import ai_work_automation.sf.adapter as _sf_adapter
+import ai_work_automation.tool_first_voc as _tool_first_voc
 
 importlib.reload(_fr_excel_ops)
 importlib.reload(_fr_mail_template)
 importlib.reload(_fr_outlook)
 importlib.reload(_fr_pipeline)
 importlib.reload(_sf_adapter)
+importlib.reload(_tool_first_voc)
 
 from ai_work_automation.connectors.pms import PmsConnector
 from ai_work_automation.field_report.excel_ops import (
@@ -68,6 +70,7 @@ from ai_work_automation.pipeline import run_case_automation
 from ai_work_automation.router import load_routes
 from ai_work_automation.services import scan_candidates, status_overview
 from ai_work_automation.settings import load_settings
+from ai_work_automation.tool_first_voc import ToolFirstVocInput, ToolFirstVocResult, run_tool_first_voc
 from ai_work_automation.ui_theme import inject_apple_theme, render_app_hero
 
 load_dotenv()
@@ -162,6 +165,24 @@ def _run_pipeline(s, case_id: str, *, dry_run: bool, issue_type: str | None,
             custom_fields_config=s.pms_custom_fields,
             only_work_order_ids=only_wo_ids,
             draft_overrides=draft_overrides,
+        )
+    finally:
+        sf_client.close()
+        pms_http.close()
+
+
+def _run_tool_first_voc(
+    s,
+    payload: ToolFirstVocInput,
+    *,
+    dry_run: bool,
+    approved: bool,
+) -> ToolFirstVocResult:
+    sf_client, sf = _sf(s)
+    pms_http, pms = _pms(s)
+    try:
+        return run_tool_first_voc(
+            sf, pms, s, payload, dry_run=dry_run, approved=approved
         )
     finally:
         sf_client.close()
@@ -1438,6 +1459,196 @@ def _render_settings_tab() -> None:
     st.caption("토큰은 UI에 저장하지 않습니다. CLI 로그인을 사용합니다.")
 
 
+def _voc_pms_html() -> str:
+    body = st.session_state.get("voc_write_body") or ""
+    files = st.session_state.get("voc_write_imgs")
+    width = int(st.session_state.get("voc_write_imgw", 600))
+    images_html = _uploaded_images_html(files, width)
+    if images_html:
+        body = (
+            f"{body}\n"
+            f'<p style="margin:0;line-height:1.2">&nbsp;</p>\n'
+            f"{images_html}"
+        )
+    return compact_pms_html(body)
+
+
+def _render_voc_result(result: ToolFirstVocResult) -> None:
+    if result.ok:
+        st.success(result.message)
+    else:
+        st.error(result.message)
+    bits = []
+    if result.dry_run:
+        bits.append("dry_run")
+    if result.pms_action:
+        bits.append(f"PMS {result.pms_action}")
+    if result.case_id:
+        bits.append(f"Case {result.case_id}")
+    if result.work_order_id:
+        bits.append(f"WO {result.work_order_id}")
+    if result.pms_issue_id:
+        bits.append(f"이슈 #{result.pms_issue_id}")
+    if bits:
+        st.caption(" · ".join(bits))
+    for label, url in result.links.items():
+        st.markdown(f"- [{label}]({url})")
+
+
+def _render_voc_write_tab(s) -> None:
+    st.subheader("VOC 작성")
+    st.caption("Salesforce Case/VOC WO를 만든 뒤 PMS 이슈 또는 댓글로 본문을 등록합니다.")
+    if s.dry_run:
+        st.warning("dry_run 모드입니다. 「승인 실행」해도 Salesforce/PMS에 쓰지 않습니다.")
+    if not s.field_report.voc_record_type_id:
+        st.warning(
+            "field_report.voc_record_type_id 가 없습니다. "
+            "config/settings.yaml에 parksystems VOC RecordTypeId "
+            "(0122j000000CglcAAC)를 넣으세요."
+        )
+
+    mode_label = st.radio(
+        "모드",
+        ["신규 Case", "기존 Case"],
+        horizontal=True,
+        key="voc_write_mode",
+    )
+    existing = mode_label == "기존 Case"
+    found = st.session_state.get("voc_write_case") if existing else None
+
+    if existing:
+        col_num, col_btn = st.columns([3, 1])
+        with col_num:
+            case_number = st.text_input(
+                "Case 번호",
+                placeholder="예: 00173841",
+                key="voc_write_case_number",
+            )
+        with col_btn:
+            st.markdown("<div style='height:1.7rem'></div>", unsafe_allow_html=True)
+            lookup = st.button("조회", key="voc_write_lookup")
+        if lookup:
+            number = (case_number or "").strip()
+            if not number:
+                st.session_state.pop("voc_write_case", None)
+                st.error("Case 번호를 입력하세요.")
+            else:
+                sf_client, sf = _sf(s)
+                try:
+                    found = sf.find_case_by_number(number)
+                except Exception as exc:  # noqa: BLE001
+                    st.session_state.pop("voc_write_case", None)
+                    st.error(f"Case 조회 실패: {exc}")
+                    found = None
+                else:
+                    st.session_state["voc_write_case"] = found
+                    if found:
+                        if not st.session_state.get("voc_write_title"):
+                            st.session_state["voc_write_title"] = found.subject
+                        if found.asset_id and not st.session_state.get("voc_write_asset"):
+                            st.session_state["voc_write_asset"] = found.asset_id
+                    else:
+                        st.warning(f"Case {number}을(를) 찾을 수 없습니다.")
+                finally:
+                    sf_client.close()
+        found = st.session_state.get("voc_write_case")
+        if found:
+            st.caption(
+                f"제목: {found.subject} · Asset: {found.asset_id or '-'} · "
+                f"SID: {st.session_state.get('voc_write_sid') or '-'}"
+            )
+
+    if "voc_write_dept" not in st.session_state:
+        st.session_state["voc_write_dept"] = "SW"
+
+    title = st.text_input("제목", key="voc_write_title")
+    department = st.text_input("부서", key="voc_write_dept")
+    col_sid, col_asset = st.columns(2)
+    with col_sid:
+        asset_sid = st.text_input("SID (선택)", key="voc_write_sid")
+    with col_asset:
+        asset_id = st.text_input("Asset Id (선택)", key="voc_write_asset")
+
+    st.caption("PMS 본문")
+    seed_key = "voc_write_body_seed"
+    if seed_key not in st.session_state:
+        st.session_state[seed_key] = ""
+        st.session_state["voc_write_body"] = ""
+    edited = st_quill(
+        value=st.session_state[seed_key],
+        html=True,
+        toolbar=_QUILL_TOOLBAR,
+        key="voc_write_quill",
+    )
+    if edited is not None:
+        st.session_state["voc_write_body"] = edited
+
+    col_img, col_w = st.columns([3, 1])
+    with col_img:
+        st.file_uploader(
+            "이미지 첨부 (본문 하단에 내장됨)",
+            type=["png", "jpg", "jpeg", "gif"],
+            accept_multiple_files=True,
+            key="voc_write_imgs",
+        )
+    with col_w:
+        st.number_input(
+            "이미지 너비(px)",
+            min_value=100,
+            max_value=1400,
+            value=600,
+            step=50,
+            key="voc_write_imgw",
+        )
+
+    pms_html = _voc_pms_html()
+    st.markdown("**등록될 모습 미리보기**")
+    _html_preview_box(pms_html or "<p></p>")
+
+    payload = ToolFirstVocInput(
+        mode="existing_case" if existing else "new_case",
+        title=(title or "").strip(),
+        department=(department or "").strip() or "SW",
+        pms_html_body=pms_html,
+        case_number=(st.session_state.get("voc_write_case_number") or "").strip() or None,
+        asset_id=(asset_id or "").strip() or None,
+        asset_sid=(asset_sid or "").strip() or None,
+    )
+    if existing and found and not payload.asset_id and found.asset_id:
+        payload.asset_id = found.asset_id
+
+    col_prev, col_go = st.columns(2)
+    with col_prev:
+        preview = st.button("미리보기", key="voc_write_preview")
+    with col_go:
+        execute = st.button("승인 실행", type="primary", key="voc_write_exec")
+
+    if preview or execute:
+        if not payload.title:
+            st.error("제목을 입력하세요.")
+        elif existing and not payload.case_number:
+            st.error("기존 Case 번호를 입력하세요.")
+        else:
+            try:
+                with st.spinner("VOC 처리 중..."):
+                    result = _run_tool_first_voc(
+                        s,
+                        payload,
+                        dry_run=True if preview else s.dry_run,
+                        approved=True,
+                    )
+            except SafetyError as exc:
+                st.error(str(exc))
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"실행 실패: {exc}")
+            else:
+                st.session_state["voc_write_result"] = result
+
+    result = st.session_state.get("voc_write_result")
+    if result is not None:
+        _render_voc_result(result)
+
+
 s = _settings()
 
 render_app_hero()
@@ -1509,8 +1720,8 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-tab_scan, tab_search, tab_field, tab_status, tab_settings = st.tabs(
-    ["VOC→PMS", "케이스 검색", "출장 보고", "이슈 상태", "설정"]
+tab_scan, tab_voc, tab_search, tab_field, tab_status, tab_settings = st.tabs(
+    ["VOC→PMS", "VOC 작성", "케이스 검색", "출장 보고", "이슈 상태", "설정"]
 )
 
 with tab_scan:
@@ -1575,6 +1786,9 @@ with tab_scan:
             targets = [options[label] for label in picked_labels]
             if targets:
                 _process_selection(s, targets, issue_type, key_prefix="scan")
+
+with tab_voc:
+    _render_voc_write_tab(s)
 
 with tab_search:
     with st.form("case_search_form"):

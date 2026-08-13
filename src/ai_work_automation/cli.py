@@ -64,6 +64,7 @@ def _make_sf_adapter(s):
         ],
         case_activities_field=s.field_report.case_activities_field,
         technical_service_record_type_id=s.field_report.technical_service_record_type_id,
+        voc_record_type_id=s.field_report.voc_record_type_id,
     )
     return sf_client, adapter
 

@@ -123,3 +123,72 @@ dry_run: true
     assert settings.wo_department_field == "Department__c"
     assert settings.idempotency_path == Path("custom/idempotency.json")
     assert settings.sf_org_alias == "my-sandbox"
+
+
+def test_load_settings_voc_record_type_id_defaults_none(tmp_path: Path):
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        'automation_enabled_after: "2026-12-01T00:00:00+09:00"',
+        encoding="utf-8",
+    )
+
+    settings = load_settings(settings_file)
+
+    assert settings.field_report.voc_record_type_id is None
+
+
+def test_load_settings_parses_voc_record_type_id(tmp_path: Path):
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        """
+automation_enabled_after: "2026-12-01T00:00:00+09:00"
+field_report:
+  voc_record_type_id: "0122j000000CglcAAC"
+""".strip(),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(settings_file)
+
+    assert settings.field_report.voc_record_type_id == "0122j000000CglcAAC"
+
+
+def test_make_sf_adapter_passes_voc_record_type_id(tmp_path: Path, monkeypatch):
+    from ai_work_automation.cli import _make_sf_adapter
+    from ai_work_automation.sf import adapter as adapter_mod
+
+    settings_file = tmp_path / "settings.yaml"
+    settings_file.write_text(
+        """
+automation_enabled_after: "2026-12-01T00:00:00+09:00"
+field_report:
+  voc_record_type_id: "0122j000000CglcAAC"
+""".strip(),
+        encoding="utf-8",
+    )
+    settings = load_settings(settings_file)
+    seen: dict[str, object] = {}
+
+    class FakeAdapter:
+        def __init__(self, client, cutoff, **kwargs) -> None:
+            seen["kwargs"] = kwargs
+
+    class FakeClient:
+        def __init__(self, instance_url: str, access_token: str) -> None:
+            pass
+
+    monkeypatch.setattr(adapter_mod, "SalesforceAdapter", FakeAdapter)
+    monkeypatch.setattr(
+        "ai_work_automation.cli.SalesforceHttpClient", FakeClient
+    )
+    monkeypatch.setattr(
+        "ai_work_automation.cli.resolve_sf_credentials",
+        lambda *a, **k: ("https://example.salesforce.com", "token"),
+    )
+
+    _make_sf_adapter(settings)
+
+    assert seen["kwargs"]["voc_record_type_id"] == "0122j000000CglcAAC"
+    assert seen["kwargs"]["technical_service_record_type_id"] == (
+        settings.field_report.technical_service_record_type_id
+    )

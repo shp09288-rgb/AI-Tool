@@ -31,4 +31,5 @@ sf_org_alias: parksystems
 # field_report:
 #   case_activities_field: Activities__c
 #   technical_service_record_type_id: "0120o000001lQJ5AAM"
+#   voc_record_type_id: "0122j000000CglcAAC"  # WorkOrder RecordType DeveloperName=VOC
 dry_run: true
