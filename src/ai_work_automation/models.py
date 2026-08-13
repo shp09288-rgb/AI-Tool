@@ -11,6 +11,8 @@ class CaseRecord(BaseModel):
     created_date: datetime
     description: str | None = None
     status: str | None = None
+    asset_id: str | None = None
+    activities: str | None = None
 
 
 class WorkOrderRecord(BaseModel):

@@ -84,12 +84,14 @@ class SalesforceAdapter:
         wo_fields: list[str] | None = None,
         case_activities_field: str = "Activities__c",
         technical_service_record_type_id: str | None = None,
+        voc_record_type_id: str | None = None,
     ) -> None:
         self.client = client
         self.cutoff = cutoff
         self.activities_field = activities_field
         self.case_activities_field = case_activities_field
         self.technical_service_record_type_id = technical_service_record_type_id
+        self.voc_record_type_id = voc_record_type_id
         self.case_fields = case_fields or [
             "Id",
             "CaseNumber",
@@ -287,16 +289,52 @@ class SalesforceAdapter:
             return None
         return records[0]["Id"]
 
-    def get_case(self, case_id: str) -> CaseRecord:
-        data = self.client.get_sobject("Case", case_id, self.case_fields)
+    def _case_soql_fields(self) -> list[str]:
+        fields = list(self.case_fields)
+        if "AssetId" not in fields:
+            fields.append("AssetId")
+        return fields
+
+    def _row_to_case(self, data: dict[str, Any]) -> CaseRecord:
+        created = data.get("CreatedDate") or ""
         return CaseRecord(
             id=data["Id"],
             case_number=data.get("CaseNumber") or "",
             subject=data.get("Subject") or "",
             description=data.get("Description"),
-            created_date=datetime.fromisoformat(data["CreatedDate"].replace("Z", "+00:00")),
+            created_date=datetime.fromisoformat(created.replace("Z", "+00:00")),
             status=data.get("Status"),
+            asset_id=data.get("AssetId"),
+            activities=data.get(self.case_activities_field),
         )
+
+    def find_case_by_number(self, case_number: str) -> CaseRecord | None:
+        field_list = ", ".join(self._case_soql_fields())
+        soql = (
+            f"SELECT {field_list} FROM Case "
+            f"WHERE CaseNumber = '{_soql_escape(case_number)}'"
+        )
+        records = self.client.query(soql).get("records", [])
+        if not records:
+            return None
+        return self._row_to_case(records[0])
+
+    def get_case(self, case_id: str) -> CaseRecord:
+        data = self.client.get_sobject("Case", case_id, self.case_fields)
+        return self._row_to_case(data)
+
+    def create_case(self, fields: dict[str, Any]) -> str:
+        result = self.client.post_sobject("Case", fields)
+        return result["id"]
+
+    def create_voc_work_order(self, *, case_id: str, fields: dict[str, Any]) -> str:
+        if not self.voc_record_type_id:
+            raise SafetyError("voc_record_type_id 설정이 없습니다")
+        body: dict[str, Any] = dict(fields)
+        body["RecordTypeId"] = self.voc_record_type_id
+        body["CaseId"] = case_id
+        result = self.client.post_sobject("WorkOrder", body)
+        return result["id"]
 
     def _wo_soql_fields(self) -> list[str]:
         fields = list(self.wo_fields)
