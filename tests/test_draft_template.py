@@ -3,6 +3,7 @@ from ai_work_automation.draft_template import (
     build_pms_comment,
     build_pms_draft,
     classify_issue_type,
+    compact_pms_html,
 )
 from ai_work_automation.models import AttachmentRef
 from ai_work_automation.settings import PmsCustomFieldsConfig
@@ -107,6 +108,25 @@ def test_body_escapes_html(sample_case, sample_wo_voc_sw):
     draft = build_pms_draft(case, sample_wo_voc_sw, issue_type="SR")
     assert "<100" not in draft.body
     assert "&lt;100" in draft.body
+
+
+def test_body_uses_compact_line_height(sample_case, sample_wo_voc_sw):
+    """PMS CKEditor 본문은 줄마다 <p>라 기본 여백이 커서, 1.2배로 고정한다."""
+    wo = sample_wo_voc_sw.model_copy(
+        update={"background": "현상\n1. 첫 줄\n2. 둘째 줄"}
+    )
+    draft = build_pms_draft(sample_case, wo, issue_type="SR")
+    assert 'style="margin:0;line-height:1.2"' in draft.body
+    assert draft.body.count('style="margin:0;line-height:1.2"') >= 3
+    comment = build_pms_comment(sample_case, wo)
+    assert 'style="margin:0;line-height:1.2"' in comment.body
+
+
+def test_compact_pms_html_rewrites_quill_paragraphs():
+    raw = "<p>현상</p><p style=\"color:red\">강조</p>"
+    out = compact_pms_html(raw)
+    assert out.startswith('<p style="margin:0;line-height:1.2">현상</p>')
+    assert 'style="margin:0;line-height:1.2;color:red"' in out
 
 
 def test_comment_mentions_followup_work_order(sample_case, sample_wo_voc_sw):

@@ -1,4 +1,4 @@
-automation_enabled_after: "2026-12-01T00:00:00+09:00"
+automation_enabled_after: "2026-12-01T00:00:00+09:00"  # 사이드바 「컷오프」에서도 변경 가능
 opt_in_path: data/opt_in.json
 job_log_path: data/job_log.jsonl
 routes_path: config/routes.yaml

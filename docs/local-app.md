@@ -16,7 +16,8 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[ui]"
 ```
 
-Salesforce CLI 로그인 (설정에 맞는 alias, 기본 `parksystems`):
+Salesforce CLI는 `1-처음설치.bat`가 없으면 자동 설치를 시도합니다.  
+로그인은 한 번만 직접 (설정에 맞는 alias, 기본 `parksystems`):
 
 앱을 연 뒤 **설정** 탭의 「로그인」으로도 같은 브라우저 로그인을 할 수 있습니다.  
 로그인된 org **목록**에서 「이 계정 사용」으로 현재 alias를 바꾸고, 행의 「로그아웃」으로 해당 org만 끊을 수 있습니다.  

@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import date
 from pathlib import Path
 
 import yaml
 
 _ENV_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+
+
+def format_cutoff_iso_kst(d: date) -> str:
+    """사이드바 날짜 → settings.yaml automation_enabled_after 형식."""
+    return f"{d.isoformat()}T00:00:00+09:00"
 
 
 def upsert_env_key(env_path: Path, key: str, value: str) -> None:

@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from typing import Any, Callable
 
@@ -18,11 +17,14 @@ class SfCredentialError(RuntimeError):
 
 
 def _run_sf_json_subprocess(args: list[str]) -> dict[str, Any]:
-    exe = shutil.which("sf")
+    from ai_work_automation.sf.cli_status import resolve_sf_executable
+
+    exe = resolve_sf_executable()
     if exe is None:
         raise SfCredentialError(
             "Salesforce CLI(sf)를 찾을 수 없습니다. "
-            "환경변수(SF_INSTANCE_URL/SF_ACCESS_TOKEN)를 설정하거나 sf CLI를 설치하세요."
+            "`1-처음설치.bat`를 다시 실행하거나 Salesforce CLI를 설치한 뒤 "
+            "앱을 재시작하고 설정 탭에서 「로그인」하세요."
         )
     proc = subprocess.run(
         [exe, *args, "--json"],

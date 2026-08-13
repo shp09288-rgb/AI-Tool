@@ -1,11 +1,13 @@
-"""Salesforce CLI org display 상태 헬퍼."""
+"""Salesforce CLI org display / list / login / logout 헬퍼."""
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -13,16 +15,47 @@ class SfCliStatusError(RuntimeError):
     """sf CLI subprocess / JSON 해석 실패."""
 
 
+_SF_NOT_FOUND_MSG = (
+    "Salesforce CLI(sf)를 찾을 수 없습니다. "
+    "`1-처음설치.bat`를 다시 실행하거나 "
+    "https://developer.salesforce.com/tools/salesforcecli 에서 설치한 뒤 "
+    "앱을 완전히 종료하고 다시 실행하세요. "
+    "그다음 설정 탭에서 「로그인」을 누르세요."
+)
+
+
+def _sf_candidate_paths() -> list[str]:
+    """PATH에 아직 안 잡힌 흔한 설치 위치(공식 설치 / npm)."""
+    local = os.environ.get("LOCALAPPDATA", "")
+    roaming = os.environ.get("APPDATA", "")
+    pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+    candidates = [
+        Path(pf) / "sf" / "bin" / "sf.cmd",
+        Path(pf) / "sf" / "bin" / "sf.exe",
+        Path(local) / "sf" / "bin" / "sf.cmd",
+        Path(local) / "sf" / "client" / "bin" / "sf.cmd",
+        Path(roaming) / "npm" / "sf.cmd",
+    ]
+    return [str(p) for p in candidates]
+
+
+def resolve_sf_executable() -> str | None:
+    """shutil.which 실패 시 공식/npm 설치 경로로 폴백."""
+    for name in ("sf", "sf.cmd", "sf.exe"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for path in _sf_candidate_paths():
+        if Path(path).is_file():
+            return path
+    return None
+
+
 def _run_sf_json_subprocess(args: list[str]) -> dict[str, Any]:
     """token_provider._run_sf_json_subprocess 와 동일 패턴 (private 재export 회피용 복제)."""
-    exe = shutil.which("sf")
+    exe = resolve_sf_executable()
     if exe is None:
-        raise SfCliStatusError(
-            "Salesforce CLI(sf)를 찾을 수 없습니다. "
-            "`1-처음설치.bat`를 다시 실행하거나 "
-            "https://developer.salesforce.com/tools/salesforcecli 에서 설치한 뒤 "
-            "`sf org login web --alias parksystems` 로 로그인하세요."
-        )
+        raise SfCliStatusError(_SF_NOT_FOUND_MSG)
     proc = subprocess.run(
         [exe, *args, "--json"],
         capture_output=True,
@@ -141,14 +174,9 @@ def logout_sf_org(
 
 
 def _run_sf_login_subprocess(args: list[str]) -> int:
-    exe = shutil.which("sf")
+    exe = resolve_sf_executable()
     if exe is None:
-        raise SfCliStatusError(
-            "Salesforce CLI(sf)를 찾을 수 없습니다. "
-            "`1-처음설치.bat`를 다시 실행하거나 "
-            "https://developer.salesforce.com/tools/salesforcecli 에서 설치한 뒤 "
-            "`sf org login web --alias parksystems` 로 로그인하세요."
-        )
+        raise SfCliStatusError(_SF_NOT_FOUND_MSG)
     proc = subprocess.run(
         [exe, *args],
         text=True,

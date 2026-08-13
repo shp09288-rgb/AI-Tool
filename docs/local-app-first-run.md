@@ -33,7 +33,7 @@ README나 이 문서의 아래쪽(파이썬 명령 등)은 **나중에** 보면 
 3. 문서 안의 **「복사 구간」** 전체를 복사해 AI 채팅에 붙여 넣습니다.
 4. AI가 안내하는 대로 **한 단계씩** 따릅니다.
    - AI가 터미널을 실행할 수 있으면: 가상환경·패키지·바로가기까지 대부분 자동
-   - 사용자가 직접 해야 하는 것: Python/`sf` 설치 마법사, Salesforce 브라우저 로그인, PMS API 키 입력(앱 **설정** 탭)
+   - 사용자가 직접 해야 하는 것: Python 설치(없을 때), Salesforce **브라우저 로그인**, PMS API 키 입력(앱 **설정** 탭). `sf` CLI는 `1-처음설치.bat`가 자동 설치 시도
 5. 끝나면 바탕화면 **「AI 업무자동화」** 를 더블클릭해 `http://localhost:8501` 이 열리는지 확인합니다.
 6. 앱 **설정** 탭에서 PMS 키·DFS2 경로를 저장하고, **SF 상태 새로고침**으로 Connected를 확인합니다.
 
@@ -74,6 +74,9 @@ python --version
 ```
 
 ### 1-2. Salesforce CLI (`sf`)
+
+**보통은 `1-처음설치.bat`가 없으면 자동 설치합니다.**  
+자동 설치가 실패했을 때만 수동으로:
 
 1. [Salesforce CLI 설치](https://developer.salesforce.com/tools/salesforcecli)
 2. 확인:

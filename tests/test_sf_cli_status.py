@@ -1,10 +1,48 @@
+from pathlib import Path
+from unittest.mock import patch
+
 from ai_work_automation.sf.cli_status import (
     SfCliStatusError,
     get_sf_cli_status,
     list_sf_orgs,
     login_sf_org,
     logout_sf_org,
+    resolve_sf_executable,
 )
+
+
+def test_resolve_sf_executable_uses_which_first(tmp_path: Path) -> None:
+    fake = tmp_path / "sf.cmd"
+    fake.write_text("@echo off\n", encoding="utf-8")
+    with patch("ai_work_automation.sf.cli_status.shutil.which", return_value=str(fake)):
+        assert resolve_sf_executable() == str(fake)
+
+
+def test_resolve_sf_executable_falls_back_to_program_files(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "Program Files" / "sf" / "bin"
+    bin_dir.mkdir(parents=True)
+    fake = bin_dir / "sf.cmd"
+    fake.write_text("@echo off\n", encoding="utf-8")
+
+    def fake_which(_name: str) -> None:
+        return None
+
+    with (
+        patch("ai_work_automation.sf.cli_status.shutil.which", side_effect=fake_which),
+        patch(
+            "ai_work_automation.sf.cli_status._sf_candidate_paths",
+            return_value=[str(fake)],
+        ),
+    ):
+        assert resolve_sf_executable() == str(fake)
+
+
+def test_resolve_sf_executable_none_when_missing() -> None:
+    with (
+        patch("ai_work_automation.sf.cli_status.shutil.which", return_value=None),
+        patch("ai_work_automation.sf.cli_status._sf_candidate_paths", return_value=[]),
+    ):
+        assert resolve_sf_executable() is None
 
 
 def test_get_sf_cli_status_connected() -> None:

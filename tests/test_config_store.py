@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import date
 import os
 
 import yaml
@@ -8,9 +9,13 @@ from ai_work_automation.config_store import (
     env_key_is_set,
     apply_env_key_to_process,
     update_settings_yaml,
+    format_cutoff_iso_kst,
 )
 from ai_work_automation.settings import load_settings
 
+
+def test_format_cutoff_iso_kst() -> None:
+    assert format_cutoff_iso_kst(date(2026, 1, 1)) == "2026-01-01T00:00:00+09:00"
 
 def test_upsert_env_key_adds_new_key(tmp_path: Path) -> None:
     env = tmp_path / ".env"

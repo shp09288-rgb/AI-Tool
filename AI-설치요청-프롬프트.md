@@ -35,12 +35,13 @@ Tailscale 허브(0.0.0.0)는 이번 범위가 아닙니다. 로컬(127.0.0.1)만
 8. 작업 폴더가 00-여기부터-읽으세요.md 와 pyproject.toml 이 있는 압축 푼 안쪽 루트인지 먼저 확인하세요.
 
 ## 당신이 수행할 체크리스트 (순서대로)
-A. 루트에 pyproject.toml / 00-여기부터-읽으세요.md 가 있는지 확인. python --version (3.11+), sf version 가능 여부 확인.
-   - 없으면 설치 다운로드 링크와 「PATH에 추가」 등 클릭할 화면만 짧게 안내한 뒤, 설치 후 새 터미널에서 다시 확인.
+A. 루트에 pyproject.toml / 00-여기부터-읽으세요.md 가 있는지 확인. python --version (3.11+) 확인.
+   - Python 없으면 설치 다운로드 링크와 「PATH에 추가」만 짧게 안내한 뒤, 설치 후 새 터미널에서 다시 확인.
+   - Salesforce CLI(sf)는 1-처음설치.bat 가 자동 설치를 시도합니다. 실패 시에만 https://developer.salesforce.com/tools/salesforcecli 안내.
 B. 가능하면 1-처음설치.bat 실행. 불가·실패 시에만: python -m venv .venv → pip install -e ".[ui]" → 설정 파일 복사 → 등록-로컬앱.bat
 C. sf org display --target-org parksystems 로 연결 확인. 안 되면 사용자에게만:
    sf org login web --alias parksystems
-   (브라우저 로그인) 후 재확인.
+   (브라우저 로그인) 후 재확인. sf 명령이 없으면 새 PowerShell을 열거나 PC 재시작 후 재시도.
 D. (선택) scripts\launch-local-app.ps1 스모크. 브라우저가 열리면 성공.
 E. 사용자에게 「설정」탭에서 PMS API Key·DFS2 경로를 넣으라고 안내. 키 값을 채팅에 붙여 넣게 하지 말 것.
 

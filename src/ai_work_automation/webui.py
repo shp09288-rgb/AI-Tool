@@ -19,6 +19,8 @@ import streamlit.components.v1 as components
 from dotenv import load_dotenv
 from streamlit_quill import st_quill
 
+from ai_work_automation.draft_template import compact_pms_html
+
 # Streamlit은 메인 스크립트만 재실행하고 의존 모듈은 sys.modules에 남을 수 있음
 import ai_work_automation.field_report.excel_ops as _fr_excel_ops
 import ai_work_automation.field_report.mail_template as _fr_mail_template
@@ -171,7 +173,7 @@ def _html_preview_box(body_html: str, height: int = 280) -> None:
     components.html(
         '<div style="background:#ffffff;color:#1a1a1a;'
         'border:1px solid #ccc;border-radius:6px;padding:14px;'
-        "font-family:'Malgun Gothic',sans-serif;font-size:14px;line-height:1.6\">"
+        "font-family:'Malgun Gothic',sans-serif;font-size:14px;line-height:1.2\">"
         f"{body_html}</div>",
         height=height,
         scrolling=True,
@@ -198,7 +200,8 @@ def _uploaded_images_html(files, width_px: int) -> str:
         encoded = base64.b64encode(f.getvalue()).decode("ascii")
         mime = f.type or "image/png"
         parts.append(
-            f'<p><img src="data:{mime};base64,{encoded}" '
+            f'<p style="margin:0;line-height:1.2">'
+            f'<img src="data:{mime};base64,{encoded}" '
             f'style="width:{width_px}px;max-width:100%" alt="{f.name}" /></p>'
         )
     return "\n".join(parts)
@@ -272,8 +275,12 @@ def _final_body(item: dict, key_prefix: str) -> str:
     width = int(st.session_state.get(f"{key_prefix}_imgw_{wo_id}", 600))
     images_html = _uploaded_images_html(files, width)
     if images_html:
-        body = f"{body}\n<p>&nbsp;</p>\n{images_html}"
-    return body
+        body = (
+            f"{body}\n"
+            f'<p style="margin:0;line-height:1.2">&nbsp;</p>\n'
+            f"{images_html}"
+        )
+    return compact_pms_html(body)
 
 
 def _collect_overrides(previews, key_prefix: str) -> dict[str, dict[str, str]]:
@@ -1352,23 +1359,7 @@ def _render_settings_tab() -> None:
 
     st.subheader("Salesforce CLI")
     alias = org_alias.strip() or s.sf_org_alias
-    if st.button("새로고침", key="settings_sf_refresh"):
-        _refresh_sf_session(alias)
-
-    action_error = st.session_state.get("sf_cli_action_error")
-    if action_error:
-        st.error(action_error)
-        st.session_state["sf_cli_action_error"] = None
-
-    status = st.session_state.get("sf_cli_status")
-    if status is None:
-        st.info("「새로고침」을 눌러 CLI 상태를 확인하세요.")
-    elif status.ok and status.connected:
-        st.success(f"Connected — {status.username or ''} ({status.alias})")
-    elif status.ok:
-        st.warning(status.message)
-    else:
-        st.error(status.message)
+    st.caption("먼저 「로그인」으로 Salesforce에 로그인한 뒤, 「새로고침」으로 상태를 확인하세요.")
 
     if st.button("로그인", key="settings_sf_login"):
         try:
@@ -1381,9 +1372,27 @@ def _render_settings_tab() -> None:
             st.success("Salesforce에 로그인했습니다.")
             st.rerun()
 
+    if st.button("새로고침", key="settings_sf_refresh"):
+        _refresh_sf_session(alias)
+
+    action_error = st.session_state.get("sf_cli_action_error")
+    if action_error:
+        st.error(action_error)
+        st.session_state["sf_cli_action_error"] = None
+
+    status = st.session_state.get("sf_cli_status")
+    if status is None:
+        st.info("로그인 후 「새로고침」을 눌러 CLI 상태를 확인하세요.")
+    elif status.ok and status.connected:
+        st.success(f"Connected — {status.username or ''} ({status.alias})")
+    elif status.ok:
+        st.warning(status.message)
+    else:
+        st.error(status.message)
+
     rows = st.session_state.get("sf_org_rows")
     if rows is None:
-        st.caption("새로고침으로 목록을 불러오세요")
+        st.caption("로그인 후 새로고침으로 목록을 불러오세요")
     elif not rows:
         st.info("로그인된 org 없음")
     else:
@@ -1436,6 +1445,33 @@ render_app_hero()
 with st.sidebar:
     st.markdown("### 필터")
     st.caption("VOC→PMS 스캔 조건")
+    from ai_work_automation.config_store import (
+        format_cutoff_iso_kst,
+        update_settings_yaml,
+    )
+
+    _kst = ZoneInfo("Asia/Seoul")
+    _settings_cutoff_date = s.automation_enabled_after.astimezone(_kst).date()
+    if "sidebar_cutoff_date" not in st.session_state:
+        st.session_state["sidebar_cutoff_date"] = _settings_cutoff_date
+    cutoff_date = st.date_input(
+        "컷오프 (이 날짜 이후 WO만)",
+        key="sidebar_cutoff_date",
+    )
+    st.caption(
+        "미래 날짜면 스캔 결과가 0건일 수 있습니다. 변경 시 settings.yaml에 저장됩니다."
+    )
+    if cutoff_date != _settings_cutoff_date:
+        try:
+            update_settings_yaml(
+                SETTINGS_PATH,
+                {"automation_enabled_after": format_cutoff_iso_kst(cutoff_date)},
+            )
+        except Exception:
+            st.error("컷오프 저장에 실패했습니다.")
+        else:
+            st.rerun()
+
     department = st.text_input("Relevant Department", value="SW")
     asset_text = st.text_area(
         "장비명 포함 (한 줄에 하나, 비우면 전체)",
@@ -1459,14 +1495,14 @@ with st.sidebar:
         value=s.scan_filters.owner_contains,
     )
     st.caption(
-        "조건 결합: (장비명 OR SID) AND 상태 AND 담당자. "
-        "기본값은 config/settings.yaml 의 scan_filters 에서 관리"
+        "조건 결합: (장비명 OR SID) AND 상태 AND 담당자 AND 컷오프. "
+        "기본값은 config/settings.yaml 에서 관리"
     )
     st.divider()
     st.caption("환경")
     st.markdown(
         f"<span style='color:#6e6e73;font-size:0.9rem'>"
-        f"컷오프 {s.automation_enabled_after:%Y-%m-%d %H:%M}<br/>"
+        f"컷오프 {s.automation_enabled_after:%Y-%m-%d} (사이드바에서 변경)<br/>"
         f"PMS {s.pms_project_id}<br/>"
         f"{'DFS2 연결됨' if s.field_report_root else 'DFS2 미설정'}"
         f"</span>",

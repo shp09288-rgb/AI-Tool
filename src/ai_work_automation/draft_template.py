@@ -5,6 +5,7 @@
 """
 
 import html
+import re
 
 from ai_work_automation.models import (
     AttachmentRef,
@@ -16,12 +17,21 @@ from ai_work_automation.settings import PmsCustomFieldsConfig
 
 TRACKER_ID = {"SR": 1, "ER": 2}
 
+# CKEditor 기본 <p> 여백이 커서 줄간격이 넓어 보임 → 1.2배로 고정
+_P_STYLE = "margin:0;line-height:1.2"
+_P = f'<p style="{_P_STYLE}">'
+_SECTION_GAP = f"\n{_P}&nbsp;</p>\n"
+_P_OPEN_RE = re.compile(r"<p(\s[^>]*)?>", re.IGNORECASE)
+_STYLE_ATTR_RE = re.compile(
+    r"""style\s*=\s*(['"])(.*?)\1""", re.IGNORECASE | re.DOTALL
+)
+
 _SR_HEADER = (
-    "<p>[상황/문제 설명]<br />\n"
+    f"{_P}[상황/문제 설명]<br />\n"
     "* 발생 조건, Sample Tiff File(보유하고 있는 경우 추가), Log File(보유하고 있는 경우 추가)</p>\n"
 )
 _ER_HEADER = (
-    "<p>[요청 배경]<br />\n"
+    f"{_P}[요청 배경]<br />\n"
     "* 요청하는 기능에 대한 구체적인 설명</p>\n"
 )
 
@@ -41,11 +51,35 @@ def _resolve_title(case: CaseRecord, wo: WorkOrderRecord) -> str:
 
 def _to_html_paragraphs(text: str) -> str:
     paragraphs = [
-        f"<p>{html.escape(line.strip())}</p>"
+        f"{_P}{html.escape(line.strip())}</p>"
         for line in text.splitlines()
         if line.strip()
     ]
     return "\n".join(paragraphs)
+
+
+def compact_pms_html(html_body: str) -> str:
+    """모든 <p>에 margin:0;line-height:1.2를 적용한다 (Quill 편집본 포함)."""
+    def _repl(match: re.Match[str]) -> str:
+        attrs = match.group(1) or ""
+        if _STYLE_ATTR_RE.search(attrs):
+
+            def _merge_style(style_match: re.Match[str]) -> str:
+                quote = style_match.group(1)
+                style = style_match.group(2)
+                style = re.sub(r"(?:^|;)\s*margin\s*:[^;]*", "", style, flags=re.I)
+                style = re.sub(
+                    r"(?:^|;)\s*line-height\s*:[^;]*", "", style, flags=re.I
+                )
+                style = style.strip().strip(";").strip()
+                merged = f"{_P_STYLE};{style}" if style else _P_STYLE
+                return f"style={quote}{merged}{quote}"
+
+            attrs = _STYLE_ATTR_RE.sub(_merge_style, attrs, count=1)
+            return f"<p{attrs}>"
+        return f'<p style="{_P_STYLE}"{attrs}>'
+
+    return _P_OPEN_RE.sub(_repl, html_body)
 
 
 def _resolve_content(case: CaseRecord, wo: WorkOrderRecord) -> str | None:
@@ -57,10 +91,10 @@ def _attachments_html(attachments: list[AttachmentRef] | None) -> str | None:
     if not attachments:
         return None
     links = "\n".join(
-        f'<p><a href="{html.escape(att.url, quote=True)}">{html.escape(att.title)}</a></p>'
+        f'{_P}<a href="{html.escape(att.url, quote=True)}">{html.escape(att.title)}</a></p>'
         for att in attachments
     )
-    return f"<p>[첨부 파일]</p>\n{links}"
+    return f"{_P}[첨부 파일]</p>\n{links}"
 
 
 def build_custom_fields(
@@ -119,7 +153,7 @@ def build_pms_draft(
 
     return DraftContent(
         title=title,
-        body="\n<p>&nbsp;</p>\n".join(parts),
+        body=compact_pms_html(_SECTION_GAP.join(parts)),
         extra=extra,
     )
 
@@ -143,4 +177,4 @@ def build_pms_comment(
     attachments_html = _attachments_html(attachments)
     if attachments_html:
         parts.append(attachments_html)
-    return DraftContent(title=title, body="\n<p>&nbsp;</p>\n".join(parts))
+    return DraftContent(title=title, body=compact_pms_html(_SECTION_GAP.join(parts)))

@@ -18,6 +18,23 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
+function Refresh-PathFromRegistry {
+    $machine = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $user = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path = (@($machine, $user) | Where-Object { $_ }) -join ";"
+    foreach ($dir in @(
+        (Join-Path $env:ProgramFiles "sf\bin"),
+        (Join-Path $env:LOCALAPPDATA "sf\bin"),
+        (Join-Path $env:APPDATA "npm")
+    )) {
+        if ((Test-Path -LiteralPath (Join-Path $dir "sf.cmd")) -or (Test-Path -LiteralPath (Join-Path $dir "sf.exe"))) {
+            if ($env:Path -notlike "*$dir*") {
+                $env:Path = "$dir;$env:Path"
+            }
+        }
+    }
+}
+
 function Get-ShortPath([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return $Path }
     $fso = New-Object -ComObject Scripting.FileSystemObject
@@ -71,7 +88,7 @@ function Stop-LocalListeners {
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 Set-Location $RepoShort
-
+Refresh-PathFromRegistry
 Write-Log "launch-local-app: repo=$RepoRoot short=$RepoShort delay=${DelaySeconds}s address=$Address port=$Port"
 
 if ($Address -eq "0.0.0.0") {
