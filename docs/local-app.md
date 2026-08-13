@@ -18,6 +18,10 @@ python -m venv .venv
 
 Salesforce CLI 로그인 (설정에 맞는 alias, 기본 `parksystems`):
 
+앱을 연 뒤 **설정** 탭의 「로그인」으로도 같은 브라우저 로그인을 할 수 있습니다.  
+로그인된 org **목록**에서 「이 계정 사용」으로 현재 alias를 바꾸고, 행의 「로그아웃」으로 해당 org만 끊을 수 있습니다.  
+아래 PowerShell 명령은 백업 경로입니다.
+
 ```powershell
 sf org login web --alias parksystems
 ```
@@ -54,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-local-app-shortcut.ps1
 1. 바로가기를 더블클릭한다.
 2. 수 초 후 브라우저에서 `http://localhost:8501`이 열린다.
 3. **설정** 탭에서 PMS API 키·출장보고 경로·dry_run·SF org alias를 확인·저장한다.
-4. SF가 미연결이면 안내에 따라 `sf org login` 후 다시 확인한다.
+4. SF가 미연결이면 **설정** 탭의 「로그인」으로 브라우저 로그인한 뒤 다시 확인한다.
 
 이미 서버가 떠 있으면 프로세스를 죽이지 않고 브라우저만 다시 엽니다.
 
