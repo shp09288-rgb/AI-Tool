@@ -1,8 +1,27 @@
-# AI 업무 자동화 CLI
+# AI 업무 자동화 Tool
 
-이 프로젝트는 Case 옵트인을 관리하고, 선택된 Case에 대해 Salesforce와 PMS 연동 작업을 실행하는 CLI 도구입니다.
+> ## GitHub에서 ZIP으로 받으셨나요?
+>
+> 1. ZIP **압축을 푼 안쪽 폴더**를 엽니다.  
+> 2. **`00-여기부터-읽으세요.md`** 를 연다.  
+> 3. 같은 폴더의 **`1-처음설치.bat`** 을 더블클릭한다.  
+>
+> 그다음 문서에 적힌 대로 Salesforce 로그인 → 바탕화면 아이콘만 누르면 됩니다.  
+> 명령어를 몰라도 됩니다. **다른 README 내용은 나중에 읽어도 됩니다.**
 
-## 실행 방법
+이 프로젝트는 Case 옵트인을 관리하고, 선택된 Case에 대해 Salesforce와 PMS 연동 작업을 실행하는 CLI·웹 UI 도구입니다.
+
+## 초보·클린 PC·ZIP
+
+| 파일 | 언제 |
+|------|------|
+| [00-여기부터-읽으세요.md](00-여기부터-읽으세요.md) | **ZIP/처음** — 제일 쉬운 순서 |
+| [1-처음설치.bat](1-처음설치.bat) | 더블클릭 자동 설치(venv·패키지·바로가기) |
+| [등록-로컬앱.bat](등록-로컬앱.bat) | 바로가기만 다시 만들기 |
+| [AI-설치요청-프롬프트.md](AI-설치요청-프롬프트.md) | Claude/GPT 등에 붙여 넣어 설치 맡기기 |
+| [docs/local-app-first-run.md](docs/local-app-first-run.md) | 조금 더 자세한 최초 실행 가이드 |
+
+## 실행 방법 (개발자·CLI)
 
 1. 가상환경을 만들고 의존성을 설치합니다.
    ```powershell
@@ -57,6 +76,10 @@ pip install -e ".[ui]"
 
 - **후보 스캔·등록** 탭: 컷오프 이후 VOC+SW 워크오더 목록(연동 여부 표시) → 워크오더 선택 → 미리보기(dry-run) → 내용 확인 후 실제 등록
 - **PMS 이슈 상태** 탭: 옵트인된 케이스에 연결된 PMS 이슈들의 현재 상태 확인
+- 바탕화면 아이콘으로 로컬만 띄우려면 [docs/local-app.md](docs/local-app.md) 참고 (`등록-로컬앱.bat`)
+- **ZIP/초보:** [00-여기부터-읽으세요.md](00-여기부터-읽으세요.md) → [`1-처음설치.bat`](1-처음설치.bat)
+- **클린 PC 최초 설치:** [docs/local-app-first-run.md](docs/local-app-first-run.md)
+- **AI에게 설치 맡기기:** [AI-설치요청-프롬프트.md](AI-설치요청-프롬프트.md) (폴더 첨부 후 복사 구간 붙여 넣기)
 
 집 PC를 Tailscale 허브로 쓰고 재부팅 후 자동 기동하려면 [docs/hub-autostart.md](docs/hub-autostart.md) 참고.
 

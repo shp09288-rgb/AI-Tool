@@ -1274,6 +1274,76 @@ def _render_field_report_tab(s) -> None:
         sf_client.close()
 
 
+def _render_settings_tab() -> None:
+    from ai_work_automation.config_store import (
+        apply_env_key_to_process,
+        env_key_is_set,
+        update_settings_yaml,
+        upsert_env_key,
+    )
+    from ai_work_automation.sf.cli_status import get_sf_cli_status
+
+    env_path = Path(".env")
+    s = _settings()
+
+    st.subheader("시크릿")
+    pms_set = env_key_is_set(env_path, "PMS_API_KEY")
+    st.caption("PMS API Key: " + ("저장됨" if pms_set else "미설정"))
+    new_key = st.text_input("PMS API Key", type="password", value="", key="settings_pms_key")
+    if st.button("PMS 키 저장", key="settings_save_pms"):
+        if not new_key.strip():
+            st.error("키를 입력하세요.")
+        else:
+            try:
+                upsert_env_key(env_path, "PMS_API_KEY", new_key.strip())
+                apply_env_key_to_process("PMS_API_KEY", new_key.strip())
+            except Exception:
+                st.error("PMS API Key 저장에 실패했습니다.")
+            else:
+                st.success("PMS API Key를 .env에 저장했습니다.")
+                st.rerun()
+
+    st.subheader("일반")
+    root_val = str(s.field_report_root) if s.field_report_root else ""
+    field_root = st.text_input("field_report_root (DFS2 경로)", value=root_val)
+    dry_run = st.toggle("dry_run", value=s.dry_run)
+    org_alias = st.text_input("sf_org_alias", value=s.sf_org_alias)
+    if field_root.strip():
+        exists = Path(field_root.strip()).exists()
+        st.caption("경로: " + ("존재함" if exists else "없음(동기화/경로 확인)"))
+    if st.button("설정 저장", key="settings_save_yaml"):
+        try:
+            update_settings_yaml(
+                SETTINGS_PATH,
+                {
+                    "field_report_root": field_root.strip() or None,
+                    "dry_run": dry_run,
+                    "sf_org_alias": org_alias.strip() or "parksystems",
+                },
+            )
+        except Exception:
+            st.error("설정 저장에 실패했습니다.")
+        else:
+            st.success("config/settings.yaml 저장됨. 다음 동작부터 반영됩니다.")
+            st.rerun()
+
+    st.subheader("Salesforce CLI")
+    alias = org_alias.strip() or s.sf_org_alias
+    if st.button("SF 상태 새로고침", key="settings_sf_refresh"):
+        st.session_state["sf_cli_status"] = get_sf_cli_status(alias)
+    status = st.session_state.get("sf_cli_status")
+    if status is None:
+        st.info("「SF 상태 새로고침」을 눌러 CLI 상태를 확인하세요.")
+    elif status.ok and status.connected:
+        st.success(f"Connected — {status.username or ''} ({status.alias})")
+    elif status.ok:
+        st.warning(status.message)
+    else:
+        st.error(status.message)
+    st.code(f"sf org login web --alias {alias}", language="powershell")
+    st.caption("SF 액세스 토큰은 UI에 저장하지 않습니다. CLI 로그인을 사용하세요.")
+
+
 s = _settings()
 
 render_app_hero()
@@ -1318,8 +1388,8 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-tab_scan, tab_search, tab_field, tab_status = st.tabs(
-    ["VOC→PMS", "케이스 검색", "출장 보고", "이슈 상태"]
+tab_scan, tab_search, tab_field, tab_status, tab_settings = st.tabs(
+    ["VOC→PMS", "케이스 검색", "출장 보고", "이슈 상태", "설정"]
 )
 
 with tab_scan:
@@ -1524,3 +1594,6 @@ with tab_status:
                 hide_index=True,
                 column_config={"PMS 이슈": st.column_config.LinkColumn()},
             )
+
+with tab_settings:
+    _render_settings_tab()
