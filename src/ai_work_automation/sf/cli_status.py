@@ -70,3 +70,55 @@ def get_sf_cli_status(
         alias=org_alias,
         message=status or ("Connected" if connected else "Not connected"),
     )
+
+
+@dataclass(frozen=True)
+class SfOrgRow:
+    alias: str
+    username: str | None
+    connected: bool
+
+
+def _org_rows_from_list_result(result: object) -> list[SfOrgRow]:
+    rows: list[SfOrgRow] = []
+    if not isinstance(result, dict):
+        return rows
+    for value in result.values():
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            username = item.get("username")
+            alias_raw = item.get("alias") or username
+            if not alias_raw:
+                continue
+            status = str(item.get("connectedStatus") or "")
+            rows.append(
+                SfOrgRow(
+                    alias=str(alias_raw),
+                    username=str(username) if username else None,
+                    connected=status.lower() == "connected",
+                )
+            )
+    return rows
+
+
+def list_sf_orgs(
+    run_sf_command: Callable[[list[str]], dict[str, Any]] | None = None,
+) -> list[SfOrgRow]:
+    runner = run_sf_command or _run_sf_json_subprocess
+    data = runner(["org", "list"])
+    if data.get("status") != 0:
+        raise SfCliStatusError(str(data.get("message") or data)[:200])
+    return _org_rows_from_list_result(data.get("result"))
+
+
+def logout_sf_org(
+    org_alias: str,
+    run_sf_command: Callable[[list[str]], dict[str, Any]] | None = None,
+) -> None:
+    runner = run_sf_command or _run_sf_json_subprocess
+    data = runner(["org", "logout", "--target-org", org_alias])
+    if data.get("status") != 0:
+        raise SfCliStatusError(str(data.get("message") or data)[:200])
