@@ -51,6 +51,9 @@ Write-Step "[3/5] Installing packages (may take a few minutes)..."
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed" }
 & $venvPy -m pip install -e ".[ui]"
 if ($LASTEXITCODE -ne 0) { throw "pip install -e .[ui] failed" }
+# Ensure Excel dependency is present even if an older install left gaps
+& $venvPy -m pip install "openpyxl>=3.1"
+if ($LASTEXITCODE -ne 0) { throw "pip install openpyxl failed" }
 
 Write-Step "[4/5] Copying config files..."
 $envPath = Join-Path $RepoRoot ".env"
