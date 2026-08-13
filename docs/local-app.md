@@ -60,6 +60,7 @@ powershell -ExecutionPolicy Bypass -File scripts\register-local-app-shortcut.ps1
 2. 수 초 후 브라우저에서 `http://localhost:8501`이 열린다.
 3. **설정** 탭에서 PMS API 키·출장보고 경로·dry_run·SF org alias를 확인·저장한다.
 4. SF가 미연결이면 **설정** 탭의 「로그인」으로 브라우저 로그인한 뒤 다시 확인한다.
+5. **VOC 작성** 탭: Quill에 붙여넣거나 이미지를 업로드한다. 업로드 후 expander에서 left/top/right/bottom으로 선택 크롭한다. 결과는 PMS 본문(base64 `<img>`)과 SF Case/WO 파일 첨부(best-effort)에 들어간다. 크롭은 기존 `Pillow`(ui extra) 슬라이더이며 `streamlit-cropper`는 쓰지 않는다.
 
 이미 서버가 떠 있으면 프로세스를 죽이지 않고 브라우저만 다시 엽니다.
 

@@ -27,6 +27,7 @@ import ai_work_automation.field_report.mail_template as _fr_mail_template
 import ai_work_automation.field_report.outlook_com as _fr_outlook
 import ai_work_automation.field_report.pipeline as _fr_pipeline
 import ai_work_automation.sf.adapter as _sf_adapter
+import ai_work_automation.media_crop as _media_crop
 import ai_work_automation.tool_first_voc as _tool_first_voc
 
 importlib.reload(_fr_excel_ops)
@@ -34,6 +35,7 @@ importlib.reload(_fr_mail_template)
 importlib.reload(_fr_outlook)
 importlib.reload(_fr_pipeline)
 importlib.reload(_sf_adapter)
+importlib.reload(_media_crop)
 importlib.reload(_tool_first_voc)
 
 from ai_work_automation.connectors.pms import PmsConnector
@@ -70,6 +72,7 @@ from ai_work_automation.pipeline import run_case_automation
 from ai_work_automation.router import load_routes
 from ai_work_automation.services import scan_candidates, status_overview
 from ai_work_automation.settings import load_settings
+from ai_work_automation.media_crop import crop_image_bytes, image_bytes_to_html
 from ai_work_automation.tool_first_voc import ToolFirstVocInput, ToolFirstVocResult, run_tool_first_voc
 from ai_work_automation.ui_theme import inject_apple_theme, render_app_hero
 
@@ -214,16 +217,15 @@ _QUILL_TOOLBAR = [
 
 def _uploaded_images_html(files, width_px: int) -> str:
     """업로드된 이미지들을 base64로 본문에 내장한다 (PMS 에디터와 같은 방식)."""
-    import base64
-
     parts = []
     for f in files or []:
-        encoded = base64.b64encode(f.getvalue()).decode("ascii")
-        mime = f.type or "image/png"
         parts.append(
-            f'<p style="margin:0;line-height:1.2">'
-            f'<img src="data:{mime};base64,{encoded}" '
-            f'style="width:{width_px}px;max-width:100%" alt="{f.name}" /></p>'
+            image_bytes_to_html(
+                f.name,
+                f.getvalue(),
+                mime=f.type or "image/png",
+                width_px=width_px,
+            )
         )
     return "\n".join(parts)
 
@@ -1459,11 +1461,121 @@ def _render_settings_tab() -> None:
     st.caption("토큰은 UI에 저장하지 않습니다. CLI 로그인을 사용합니다.")
 
 
+def _voc_crop_key(kind: str, index: int, name: str) -> str:
+    return f"voc_crop_{kind}_{index}_{name}"
+
+
+def _voc_image_payloads() -> list[tuple[str, bytes, str]]:
+    out: list[tuple[str, bytes, str]] = []
+    files = st.session_state.get("voc_write_imgs") or []
+    for i, f in enumerate(files):
+        raw = f.getvalue()
+        mime = f.type or "image/png"
+        name = f.name
+        apply = bool(st.session_state.get(_voc_crop_key("apply", i, name)))
+        if apply:
+            try:
+                data = crop_image_bytes(
+                    raw,
+                    left=int(st.session_state.get(_voc_crop_key("l", i, name), 0)),
+                    top=int(st.session_state.get(_voc_crop_key("t", i, name), 0)),
+                    right=int(st.session_state.get(_voc_crop_key("r", i, name), 0)),
+                    bottom=int(st.session_state.get(_voc_crop_key("b", i, name), 0)),
+                )
+                if (mime or "").lower() == "image/gif":
+                    mime = "image/png"
+                    stem = name.rsplit(".", 1)[0]
+                    name = f"{stem}.png"
+            except Exception:
+                data = raw
+        else:
+            data = raw
+        out.append((name, data, mime))
+    return out
+
+
+def _render_voc_crop_editors() -> None:
+    import io
+
+    from PIL import Image
+
+    files = st.session_state.get("voc_write_imgs") or []
+    if not files:
+        return
+    st.caption(
+        "업로드 이미지는 PMS 본문(base64)과 SF Case/WO 파일 첨부(best-effort)에 들어갑니다. "
+        "크롭은 선택이며 left/top/right/bottom 픽셀입니다."
+    )
+    for i, f in enumerate(files):
+        raw = f.getvalue()
+        name = f.name
+        with st.expander(f"크롭 (선택): {name}", expanded=False):
+            try:
+                img = Image.open(io.BytesIO(raw))
+                iw, ih = img.size
+            except Exception as exc:
+                st.caption(f"이미지를 열 수 없습니다: {exc}")
+                continue
+            st.image(raw, caption=f"{iw}×{ih}px", width=min(480, max(int(iw), 1)))
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.number_input(
+                    "left",
+                    min_value=0,
+                    max_value=max(iw, 0),
+                    value=0,
+                    step=1,
+                    key=_voc_crop_key("l", i, name),
+                )
+            with c2:
+                st.number_input(
+                    "top",
+                    min_value=0,
+                    max_value=max(ih, 0),
+                    value=0,
+                    step=1,
+                    key=_voc_crop_key("t", i, name),
+                )
+            with c3:
+                st.number_input(
+                    "right",
+                    min_value=0,
+                    max_value=max(iw, 0),
+                    value=iw,
+                    step=1,
+                    key=_voc_crop_key("r", i, name),
+                )
+            with c4:
+                st.number_input(
+                    "bottom",
+                    min_value=0,
+                    max_value=max(ih, 0),
+                    value=ih,
+                    step=1,
+                    key=_voc_crop_key("b", i, name),
+                )
+            st.checkbox("이 이미지 크롭 적용", key=_voc_crop_key("apply", i, name))
+            if st.session_state.get(_voc_crop_key("apply", i, name)):
+                try:
+                    cropped = crop_image_bytes(
+                        raw,
+                        left=int(st.session_state[_voc_crop_key("l", i, name)]),
+                        top=int(st.session_state[_voc_crop_key("t", i, name)]),
+                        right=int(st.session_state[_voc_crop_key("r", i, name)]),
+                        bottom=int(st.session_state[_voc_crop_key("b", i, name)]),
+                    )
+                    st.image(cropped, caption="크롭 미리보기")
+                except Exception as exc:
+                    st.caption(f"크롭 실패: {exc}")
+
+
 def _voc_pms_html() -> str:
     body = st.session_state.get("voc_write_body") or ""
-    files = st.session_state.get("voc_write_imgs")
     width = int(st.session_state.get("voc_write_imgw", 600))
-    images_html = _uploaded_images_html(files, width)
+    images_html = "\n".join(
+        image_bytes_to_html(name, data, mime=mime, width_px=width)
+        for name, data, mime in _voc_image_payloads()
+    )
     if images_html:
         body = (
             f"{body}\n"
@@ -1586,7 +1698,7 @@ def _render_voc_write_tab(s) -> None:
     col_img, col_w = st.columns([3, 1])
     with col_img:
         st.file_uploader(
-            "이미지 첨부 (본문 하단에 내장됨)",
+            "이미지 첨부 (PMS 본문 내장 + SF Case/WO 첨부)",
             type=["png", "jpg", "jpeg", "gif"],
             accept_multiple_files=True,
             key="voc_write_imgs",
@@ -1601,10 +1713,13 @@ def _render_voc_write_tab(s) -> None:
             key="voc_write_imgw",
         )
 
+    _render_voc_crop_editors()
+
     pms_html = _voc_pms_html()
     st.markdown("**등록될 모습 미리보기**")
     _html_preview_box(pms_html or "<p></p>")
 
+    images = _voc_image_payloads()
     payload = ToolFirstVocInput(
         mode="existing_case" if existing else "new_case",
         title=(title or "").strip(),
@@ -1613,6 +1728,7 @@ def _render_voc_write_tab(s) -> None:
         case_number=(st.session_state.get("voc_write_case_number") or "").strip() or None,
         asset_id=(asset_id or "").strip() or None,
         asset_sid=(asset_sid or "").strip() or None,
+        attachment_files=[(name, data) for name, data, _mime in images],
     )
     if existing and found and not payload.asset_id and found.asset_id:
         payload.asset_id = found.asset_id

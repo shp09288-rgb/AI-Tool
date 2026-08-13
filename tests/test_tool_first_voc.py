@@ -180,6 +180,66 @@ def test_not_approved_does_not_write():
     pms.add_comment.assert_not_called()
 
 
+def test_attachments_uploaded_to_case_and_wo_after_create():
+    sf = _sf()
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4710", url="https://pms.example/issues/4710"
+    )
+    payload = _payload(
+        mode="new_case",
+        case_number=None,
+        attachment_files=[("shot.png", b"PNGDATA")],
+    )
+
+    result = run_tool_first_voc(
+        sf, pms, _settings(), payload, dry_run=False, approved=True
+    )
+
+    assert result.ok is True
+    calls = sf.client.create_content_version_from_bytes.call_args_list
+    assert len(calls) == 2
+    locations = {c.kwargs["first_publish_location_id"] for c in calls}
+    assert locations == {"500NEW", "0WONEW"}
+    assert all(c.kwargs["data"] == b"PNGDATA" for c in calls)
+    assert all(c.kwargs["path_on_client"] == "shot.png" for c in calls)
+
+
+def test_dry_run_does_not_attach_files():
+    case = _case()
+    sf = _sf(case=case, existing_wos=[])
+    pms = MagicMock()
+    payload = _payload(attachment_files=[("shot.png", b"PNGDATA")])
+
+    run_tool_first_voc(sf, pms, _settings(), payload, dry_run=True, approved=True)
+
+    sf.client.create_content_version_from_bytes.assert_not_called()
+    sf.create_case.assert_not_called()
+    sf.create_voc_work_order.assert_not_called()
+
+
+def test_attach_failure_does_not_fail_voc():
+    sf = _sf()
+    sf.client.create_content_version_from_bytes.side_effect = RuntimeError("sf down")
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4710", url="https://pms.example/issues/4710"
+    )
+    payload = _payload(
+        mode="new_case",
+        case_number=None,
+        attachment_files=[("shot.png", b"PNGDATA")],
+    )
+
+    result = run_tool_first_voc(
+        sf, pms, _settings(), payload, dry_run=False, approved=True
+    )
+
+    assert result.ok is True
+    assert result.pms_action == "create"
+    pms.create.assert_called_once()
+
+
 def test_new_case_creates_case_wo_and_pms_issue():
     sf = _sf()
     pms = MagicMock()

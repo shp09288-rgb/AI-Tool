@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 from ai_work_automation.draft_template import (
@@ -26,6 +27,7 @@ class ToolFirstVocInput:
     asset_id: str | None = None
     asset_sid: str | None = None
     sf_summary: str = ""
+    attachment_files: list[tuple[str, bytes]] = field(default_factory=list)
 
 
 @dataclass
@@ -133,6 +135,28 @@ def _pms_body(payload: ToolFirstVocInput) -> str:
     return compact_pms_html(payload.pms_html_body) if payload.pms_html_body else ""
 
 
+def _best_effort_attach(sf: Any, case_id: str, wo_id: str, files: list[tuple[str, bytes]]) -> None:
+    if not files:
+        return
+    client = getattr(sf, "client", None)
+    create = getattr(client, "create_content_version_from_bytes", None)
+    if create is None:
+        return
+    for record_id in (case_id, wo_id):
+        if not record_id:
+            continue
+        for name, data in files:
+            try:
+                create(
+                    title=Path(name).stem or name,
+                    path_on_client=name,
+                    first_publish_location_id=record_id,
+                    data=data,
+                )
+            except Exception:
+                continue
+
+
 def _links(sf: Any, case_id: str | None, wo_id: str | None, pms_url: str | None) -> dict[str, str]:
     out: dict[str, str] = {}
     instance = getattr(getattr(sf, "client", None), "instance_url", None)
@@ -203,6 +227,7 @@ def run_tool_first_voc(
         case_id=case_id, fields=_wo_fields(payload, settings)
     )
     wo = _synthetic_wo(wo_id, case_id, payload)
+    _best_effort_attach(sf, case_id, wo_id, payload.attachment_files)
     body = _pms_body(payload)
 
     if existing_issue:
