@@ -1281,7 +1281,25 @@ def _render_settings_tab() -> None:
         update_settings_yaml,
         upsert_env_key,
     )
-    from ai_work_automation.sf.cli_status import get_sf_cli_status
+    from ai_work_automation.sf.cli_status import (
+        SfCliStatusError,
+        get_sf_cli_status,
+        list_sf_orgs,
+        login_sf_org,
+        logout_sf_org,
+    )
+
+    def _sf_widget_key(prefix: str, org_alias: str) -> str:
+        safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", org_alias)
+        return f"{prefix}_{safe}"
+
+    def _refresh_sf_session(current_alias: str) -> None:
+        try:
+            st.session_state["sf_org_rows"] = list_sf_orgs()
+            st.session_state["sf_cli_action_error"] = None
+        except SfCliStatusError as exc:
+            st.session_state["sf_cli_action_error"] = str(exc)
+        st.session_state["sf_cli_status"] = get_sf_cli_status(current_alias)
 
     env_path = Path(".env")
     s = _settings()
@@ -1329,19 +1347,80 @@ def _render_settings_tab() -> None:
 
     st.subheader("Salesforce CLI")
     alias = org_alias.strip() or s.sf_org_alias
-    if st.button("SF 상태 새로고침", key="settings_sf_refresh"):
-        st.session_state["sf_cli_status"] = get_sf_cli_status(alias)
+    if st.button("새로고침", key="settings_sf_refresh"):
+        _refresh_sf_session(alias)
+
+    action_error = st.session_state.get("sf_cli_action_error")
+    if action_error:
+        st.error(action_error)
+        st.session_state["sf_cli_action_error"] = None
+
     status = st.session_state.get("sf_cli_status")
     if status is None:
-        st.info("「SF 상태 새로고침」을 눌러 CLI 상태를 확인하세요.")
+        st.info("「새로고침」을 눌러 CLI 상태를 확인하세요.")
     elif status.ok and status.connected:
         st.success(f"Connected — {status.username or ''} ({status.alias})")
     elif status.ok:
         st.warning(status.message)
     else:
         st.error(status.message)
-    st.code(f"sf org login web --alias {alias}", language="powershell")
-    st.caption("SF 액세스 토큰은 UI에 저장하지 않습니다. CLI 로그인을 사용하세요.")
+
+    if st.button("로그인", key="settings_sf_login"):
+        try:
+            with st.spinner("브라우저에서 Salesforce에 로그인하세요…"):
+                login_sf_org(alias)
+        except SfCliStatusError as exc:
+            st.error(str(exc))
+        else:
+            _refresh_sf_session(alias)
+            st.success("Salesforce에 로그인했습니다.")
+            st.rerun()
+
+    rows = st.session_state.get("sf_org_rows")
+    if rows is None:
+        st.caption("새로고침으로 목록을 불러오세요")
+    elif not rows:
+        st.info("로그인된 org 없음")
+    else:
+        for row in rows:
+            c_alias, c_user, c_conn, c_use, c_out = st.columns([2.2, 3, 1.4, 1.6, 1.2])
+            c_alias.write(row.alias)
+            c_user.write(row.username or "")
+            c_conn.write("Connected" if row.connected else "Disconnected")
+            if c_use.button("이 계정 사용", key=_sf_widget_key("settings_sf_use", row.alias)):
+                try:
+                    update_settings_yaml(SETTINGS_PATH, {"sf_org_alias": row.alias})
+                except Exception:
+                    st.error("설정 저장에 실패했습니다.")
+                else:
+                    _refresh_sf_session(row.alias)
+                    st.success(f"{row.alias} 계정을 사용합니다.")
+                    st.rerun()
+            if c_out.button("로그아웃", key=_sf_widget_key("settings_sf_logout", row.alias)):
+                st.session_state["sf_logout_pending"] = row.alias
+            if st.session_state.get("sf_logout_pending") == row.alias:
+                st.warning("정말 로그아웃할까요?")
+                c_ok, c_cancel = st.columns(2)
+                if c_ok.button(
+                    "확인",
+                    key=_sf_widget_key("settings_sf_logout_ok", row.alias),
+                ):
+                    pending = st.session_state.pop("sf_logout_pending", None)
+                    logout_error = None
+                    if pending:
+                        try:
+                            logout_sf_org(pending)
+                        except SfCliStatusError as exc:
+                            logout_error = str(exc)
+                    _refresh_sf_session(alias)
+                    if logout_error:
+                        st.session_state["sf_cli_action_error"] = logout_error
+                    st.rerun()
+                if c_cancel.button("취소", key="settings_sf_logout_cancel"):
+                    st.session_state.pop("sf_logout_pending", None)
+                    st.rerun()
+
+    st.caption("토큰은 UI에 저장하지 않습니다. CLI 로그인을 사용합니다.")
 
 
 s = _settings()
