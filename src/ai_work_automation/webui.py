@@ -1586,7 +1586,10 @@ def _voc_pms_html() -> str:
 
 
 def _render_voc_result(result: ToolFirstVocResult) -> None:
-    if result.ok:
+    warning = result.ok and "Activities" in result.message and "실패" in result.message
+    if warning:
+        st.warning(result.message)
+    elif result.ok:
         st.success(result.message)
     else:
         st.error(result.message)
@@ -1605,6 +1608,37 @@ def _render_voc_result(result: ToolFirstVocResult) -> None:
         st.caption(" · ".join(bits))
     for label, url in result.links.items():
         st.markdown(f"- [{label}]({url})")
+
+
+def _render_voc_ids_from_exc(exc: BaseException) -> None:
+    case_id = getattr(exc, "case_id", None)
+    wo_id = getattr(exc, "work_order_id", None)
+    pms_id = getattr(exc, "pms_issue_id", None)
+    links = getattr(exc, "links", None) or {}
+    bits = []
+    if case_id:
+        bits.append(f"Case {case_id}")
+    if wo_id:
+        bits.append(f"WO {wo_id}")
+    if pms_id:
+        bits.append(f"이슈 #{pms_id}")
+    if bits:
+        st.caption(" · ".join(bits))
+        st.warning("이미 생성된 레코드가 있습니다. 재실행하면 중복될 수 있습니다.")
+    for label, url in links.items():
+        st.markdown(f"- [{label}]({url})")
+
+
+def _render_voc_sf_summary(payload: ToolFirstVocInput) -> None:
+    mode = "기존 Case" if payload.mode == "existing_case" else "신규 Case"
+    st.markdown("**Salesforce 요약**")
+    st.caption(
+        f"모드: {mode} · 제목: {payload.title or '-'} · 부서: {payload.department or '-'}"
+    )
+    bits = [f"Asset: {payload.asset_id or '-'}", f"SID: {payload.asset_sid or '-'}"]
+    if payload.mode == "existing_case":
+        bits.insert(0, f"Case: {payload.case_number or '-'}")
+    st.caption(" · ".join(bits))
 
 
 def _render_voc_write_tab(s) -> None:
@@ -1716,9 +1750,6 @@ def _render_voc_write_tab(s) -> None:
     _render_voc_crop_editors()
 
     pms_html = _voc_pms_html()
-    st.markdown("**등록될 모습 미리보기**")
-    _html_preview_box(pms_html or "<p></p>")
-
     images = _voc_image_payloads()
     payload = ToolFirstVocInput(
         mode="existing_case" if existing else "new_case",
@@ -1732,6 +1763,10 @@ def _render_voc_write_tab(s) -> None:
     )
     if existing and found and not payload.asset_id and found.asset_id:
         payload.asset_id = found.asset_id
+
+    _render_voc_sf_summary(payload)
+    st.markdown("**등록될 모습 미리보기**")
+    _html_preview_box(pms_html or "<p></p>")
 
     col_prev, col_go = st.columns(2)
     with col_prev:
@@ -1755,8 +1790,10 @@ def _render_voc_write_tab(s) -> None:
                     )
             except SafetyError as exc:
                 st.error(str(exc))
+                _render_voc_ids_from_exc(exc)
             except Exception as exc:  # noqa: BLE001
                 st.error(f"실행 실패: {exc}")
+                _render_voc_ids_from_exc(exc)
             else:
                 st.session_state["voc_write_result"] = result
 

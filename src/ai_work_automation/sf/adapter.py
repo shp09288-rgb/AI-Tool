@@ -119,15 +119,17 @@ class SalesforceAdapter:
         line: str,
         *,
         case_selected: bool,
+        enforce_cutoff: bool = True,
     ) -> None:
         if not case_selected:
             raise SafetyError("옵트인되지 않은 Case의 Work Order는 수정할 수 없습니다")
 
         created = wo.created_date
-        if created is None:
-            raise SafetyError("Work Order CreatedDate가 없어 컷오프를 검사할 수 없습니다")
-        if not is_after_cutoff(created, self.cutoff):
-            raise SafetyError("컷오프 이전 Work Order는 수정할 수 없습니다")
+        if enforce_cutoff:
+            if created is None:
+                raise SafetyError("Work Order CreatedDate가 없어 컷오프를 검사할 수 없습니다")
+            if not is_after_cutoff(created, self.cutoff):
+                raise SafetyError("컷오프 이전 Work Order는 수정할 수 없습니다")
 
         existing = wo.activities or ""
         separator = "\n" if existing and not existing.endswith("\n") else ""

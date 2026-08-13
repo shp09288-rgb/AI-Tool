@@ -169,6 +169,59 @@ def _links(sf: Any, case_id: str | None, wo_id: str | None, pms_url: str | None)
     return out
 
 
+def _append_fresh_wo_activities(sf: Any, wo: WorkOrderRecord, line: str) -> None:
+    try:
+        sf.append_work_order_activities(
+            wo, line, case_selected=True, enforce_cutoff=False
+        )
+    except TypeError:
+        sf.append_work_order_activities(wo, line, case_selected=True)
+
+
+def _after_pms_write(
+    sf: Any,
+    wo: WorkOrderRecord,
+    *,
+    dry_run: bool,
+    case_id: str,
+    wo_id: str,
+    pms_action: PmsAction,
+    pms_issue_id: str | None,
+    pms_url: str | None,
+    success_message: str,
+    line: str,
+) -> ToolFirstVocResult:
+    links = _links(sf, case_id, wo_id, pms_url)
+    try:
+        _append_fresh_wo_activities(sf, wo, line)
+    except Exception as exc:
+        return _result(
+            ok=True,
+            dry_run=dry_run,
+            case_id=case_id,
+            work_order_id=wo_id,
+            pms_action=pms_action,
+            pms_issue_id=pms_issue_id,
+            pms_url=pms_url,
+            message=(
+                "PMS/SF 레코드는 생성됐지만 Activities 갱신에 실패했습니다: "
+                f"{exc}"
+            ),
+            links=links,
+        )
+    return _result(
+        ok=True,
+        dry_run=dry_run,
+        case_id=case_id,
+        work_order_id=wo_id,
+        pms_action=pms_action,
+        pms_issue_id=pms_issue_id,
+        pms_url=pms_url,
+        message=success_message,
+        links=links,
+    )
+
+
 def run_tool_first_voc(
     sf: Any,
     pms: Any,
@@ -216,84 +269,101 @@ def run_tool_first_voc(
             links=_links(sf, case.id if case else None, None, None),
         )
 
-    if payload.mode == "new_case":
-        case_id = sf.create_case(_case_fields(payload))
-        case = _synthetic_case(case_id, payload)
-    else:
-        assert case is not None
-        case_id = case.id
+    case_id: str | None = None
+    wo_id: str | None = None
+    pms_issue_id: str | None = existing_issue
+    pms_url: str | None = None
+    try:
+        if payload.mode == "new_case":
+            case_id = sf.create_case(_case_fields(payload))
+            case = _synthetic_case(case_id, payload)
+        else:
+            assert case is not None
+            case_id = case.id
 
-    wo_id = sf.create_voc_work_order(
-        case_id=case_id, fields=_wo_fields(payload, settings)
-    )
-    wo = _synthetic_wo(wo_id, case_id, payload)
-    _best_effort_attach(sf, case_id, wo_id, payload.attachment_files)
-    body = _pms_body(payload)
+        wo_id = sf.create_voc_work_order(
+            case_id=case_id, fields=_wo_fields(payload, settings)
+        )
+        wo = _synthetic_wo(wo_id, case_id, payload)
+        _best_effort_attach(sf, case_id, wo_id, payload.attachment_files)
+        body = _pms_body(payload)
 
-    if existing_issue:
-        comment = build_pms_comment(case, wo)
-        notes = body or comment.body
-        conn = pms.add_comment(existing_issue, notes)
+        if existing_issue:
+            comment = build_pms_comment(case, wo)
+            notes = body or comment.body
+            conn = pms.add_comment(existing_issue, notes)
+            if not conn.ok:
+                return _result(
+                    ok=False,
+                    dry_run=False,
+                    case_id=case_id,
+                    work_order_id=wo_id,
+                    pms_action="comment",
+                    pms_issue_id=existing_issue,
+                    message=f"PMS 댓글 실패: {conn.error}",
+                    links=_links(sf, case_id, wo_id, None),
+                )
+            return _after_pms_write(
+                sf,
+                wo,
+                dry_run=False,
+                case_id=case_id,
+                wo_id=wo_id,
+                pms_action="comment",
+                pms_issue_id=existing_issue,
+                pms_url=conn.url,
+                success_message="기존 PMS 이슈에 댓글을 등록했습니다.",
+                line=f"PMS – {conn.url} (댓글)",
+            )
+
+        draft = build_pms_draft(
+            case,
+            wo,
+            custom_fields_config=getattr(settings, "pms_custom_fields", None),
+        )
+        updates: dict[str, Any] = {"title": payload.title}
+        if body:
+            updates["body"] = body
+        draft = draft.model_copy(update=updates)
+        conn = pms.create(
+            draft,
+            project_id=settings.pms_project_id,
+            tracker_id=draft.extra.get("tracker_id"),
+            custom_fields=draft.extra.get("custom_fields"),
+        )
         if not conn.ok:
             return _result(
                 ok=False,
                 dry_run=False,
                 case_id=case_id,
                 work_order_id=wo_id,
-                pms_action="comment",
-                pms_issue_id=existing_issue,
-                message=f"PMS 댓글 실패: {conn.error}",
+                pms_action="create",
+                message=f"PMS 이슈 생성 실패: {conn.error}",
                 links=_links(sf, case_id, wo_id, None),
             )
-        line = f"PMS – {conn.url} (댓글)"
-        sf.append_work_order_activities(wo, line, case_selected=True)
-        return _result(
-            ok=True,
+        return _after_pms_write(
+            sf,
+            wo,
             dry_run=False,
             case_id=case_id,
-            work_order_id=wo_id,
-            pms_action="comment",
-            pms_issue_id=existing_issue,
-            pms_url=conn.url,
-            message="기존 PMS 이슈에 댓글을 등록했습니다.",
-            links=_links(sf, case_id, wo_id, conn.url),
-        )
-
-    draft = build_pms_draft(
-        case,
-        wo,
-        custom_fields_config=getattr(settings, "pms_custom_fields", None),
-    )
-    updates: dict[str, Any] = {"title": payload.title}
-    if body:
-        updates["body"] = body
-    draft = draft.model_copy(update=updates)
-    conn = pms.create(
-        draft,
-        project_id=settings.pms_project_id,
-        tracker_id=draft.extra.get("tracker_id"),
-        custom_fields=draft.extra.get("custom_fields"),
-    )
-    if not conn.ok:
-        return _result(
-            ok=False,
-            dry_run=False,
-            case_id=case_id,
-            work_order_id=wo_id,
+            wo_id=wo_id,
             pms_action="create",
-            message=f"PMS 이슈 생성 실패: {conn.error}",
-            links=_links(sf, case_id, wo_id, None),
+            pms_issue_id=conn.ref,
+            pms_url=conn.url,
+            success_message="PMS 이슈를 생성했습니다.",
+            line=f"PMS – {conn.url}",
         )
-    line = f"PMS – {conn.url}"
-    sf.append_work_order_activities(wo, line, case_selected=True)
-    return _result(
-        ok=True,
-        dry_run=False,
-        case_id=case_id,
-        work_order_id=wo_id,
-        pms_action="create",
-        pms_issue_id=conn.ref,
-        pms_url=conn.url,
-        message="PMS 이슈를 생성했습니다.",
-        links=_links(sf, case_id, wo_id, conn.url),
-    )
+    except Exception as exc:
+        if case_id or wo_id or pms_issue_id:
+            return _result(
+                ok=False,
+                dry_run=False,
+                case_id=case_id,
+                work_order_id=wo_id,
+                pms_action=pms_action,
+                pms_issue_id=pms_issue_id,
+                pms_url=pms_url,
+                message=str(exc),
+                links=_links(sf, case_id, wo_id, pms_url),
+            )
+        raise

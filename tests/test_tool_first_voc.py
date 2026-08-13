@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from ai_work_automation.models import CaseRecord, ConnectorResult, WorkOrderRecord
 from ai_work_automation.settings import Settings
+from ai_work_automation.sf.adapter import SafetyError
 from ai_work_automation.tool_first_voc import (
     ToolFirstVocInput,
     run_tool_first_voc,
@@ -99,6 +100,7 @@ def test_existing_case_with_pms_issue_adds_comment_not_create():
     assert wo_arg.id == "0WONEW"
     assert f"PMS – {PMS_URL}" in line
     assert sf.append_work_order_activities.call_args.kwargs["case_selected"] is True
+    assert sf.append_work_order_activities.call_args.kwargs.get("enforce_cutoff") is False
 
 
 def test_existing_case_without_issue_creates_pms_issue():
@@ -278,3 +280,30 @@ def test_new_case_creates_case_wo_and_pms_issue():
     line = sf.append_work_order_activities.call_args.args[1]
     assert line == "PMS – https://pms.example/issues/4710"
     assert result.links["pms"] == "https://pms.example/issues/4710"
+    assert sf.append_work_order_activities.call_args.kwargs.get("enforce_cutoff") is False
+
+
+def test_activities_append_failure_still_returns_created_ids():
+    sf = _sf()
+    sf.append_work_order_activities.side_effect = SafetyError(
+        "컷오프 이전 Work Order는 수정할 수 없습니다"
+    )
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4710", url="https://pms.example/issues/4710"
+    )
+    payload = _payload(mode="new_case", case_number=None)
+
+    result = run_tool_first_voc(
+        sf, pms, _settings(), payload, dry_run=False, approved=True
+    )
+
+    assert result.ok is True
+    assert result.case_id == "500NEW"
+    assert result.work_order_id == "0WONEW"
+    assert result.pms_issue_id == "4710"
+    assert result.pms_url == "https://pms.example/issues/4710"
+    assert result.links["case"] == "https://sf.example/500NEW"
+    assert result.links["work_order"] == "https://sf.example/0WONEW"
+    assert result.links["pms"] == "https://pms.example/issues/4710"
+    assert "Activities" in result.message

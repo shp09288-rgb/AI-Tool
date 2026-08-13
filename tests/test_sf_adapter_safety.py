@@ -85,6 +85,31 @@ def test_append_succeeds_when_allowed():
     assert "PMS - https://pms.example/issues/1" in body["VOC_Activities__c"]
 
 
+def test_append_skips_cutoff_when_not_enforced():
+    client = MagicMock()
+    adapter = SalesforceAdapter(
+        client=client,
+        cutoff=datetime(2026, 12, 1, tzinfo=timezone.utc),
+        activities_field="VOC_Activities__c",
+    )
+    wo = WorkOrderRecord(
+        id="0WONEW",
+        work_order_number="1",
+        record_type="VOC",
+        activities="",
+        created_date=datetime(2026, 8, 13, tzinfo=timezone.utc),
+    )
+
+    adapter.append_work_order_activities(
+        wo,
+        line="PMS - https://pms.example/issues/1",
+        case_selected=True,
+        enforce_cutoff=False,
+    )
+
+    client.patch_sobject.assert_called_once()
+
+
 def test_get_work_orders_maps_voc_title_and_keeps_department():
     client = MagicMock()
     client.query.return_value = {
