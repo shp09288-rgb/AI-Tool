@@ -49,7 +49,7 @@ def test_list_sf_orgs_flattens_non_scratch_and_sandboxes() -> None:
         return {
             "status": 0,
             "result": {
-                "nonScratchOrgs": [
+                "other": [
                     {
                         "alias": "parksystems",
                         "username": "a@example.com",
@@ -63,7 +63,7 @@ def test_list_sf_orgs_flattens_non_scratch_and_sandboxes() -> None:
                         "connectedStatus": "Disconnected",
                     }
                 ],
-                "other": [],
+                "devHubs": [],
             },
         }
 
@@ -74,6 +74,27 @@ def test_list_sf_orgs_flattens_non_scratch_and_sandboxes() -> None:
     assert rows[0].connected is True
     assert rows[1].alias == "sbx"
     assert rows[1].connected is False
+
+
+def test_list_sf_orgs_dedupes_nonScratchOrgs_overlap() -> None:
+    def fake(_args: list[str]) -> dict:
+        return {
+            "status": 0,
+            "result": {
+                "other": [
+                    {"alias": "parksystems", "username": "a@example.com", "connectedStatus": "Connected"},
+                ],
+                "sandboxes": [],
+                "devHubs": [],
+                "nonScratchOrgs": [
+                    {"alias": "parksystems", "username": "a@example.com", "connectedStatus": "Connected"},
+                ],
+            },
+        }
+
+    rows = list_sf_orgs(run_sf_command=fake)
+    assert len(rows) == 1
+    assert rows[0].alias == "parksystems"
 
 
 def test_list_sf_orgs_skips_entries_without_alias_uses_username_as_fallback_alias() -> None:

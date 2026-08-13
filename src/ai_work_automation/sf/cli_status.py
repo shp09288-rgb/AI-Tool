@@ -19,7 +19,9 @@ def _run_sf_json_subprocess(args: list[str]) -> dict[str, Any]:
     if exe is None:
         raise SfCliStatusError(
             "Salesforce CLI(sf)를 찾을 수 없습니다. "
-            "환경변수(SF_INSTANCE_URL/SF_ACCESS_TOKEN)를 설정하거나 sf CLI를 설치하세요."
+            "`1-처음설치.bat`를 다시 실행하거나 "
+            "https://developer.salesforce.com/tools/salesforcecli 에서 설치한 뒤 "
+            "`sf org login web --alias parksystems` 로 로그인하세요."
         )
     proc = subprocess.run(
         [exe, *args, "--json"],
@@ -79,11 +81,21 @@ class SfOrgRow:
     connected: bool
 
 
+_PREFERRED_ORG_LIST_KEYS = ("other", "sandboxes", "devHubs", "scratchOrgs", "regularOrgs")
+
+
 def _org_rows_from_list_result(result: object) -> list[SfOrgRow]:
     rows: list[SfOrgRow] = []
     if not isinstance(result, dict):
         return rows
-    for value in result.values():
+    preferred_present = any(key in result for key in _PREFERRED_ORG_LIST_KEYS)
+    values: list[object] = (
+        [result[key] for key in _PREFERRED_ORG_LIST_KEYS if key in result]
+        if preferred_present
+        else list(result.values())
+    )
+    seen_aliases: set[str] = set()
+    for value in values:
         if not isinstance(value, list):
             continue
         for item in value:
@@ -93,10 +105,14 @@ def _org_rows_from_list_result(result: object) -> list[SfOrgRow]:
             alias_raw = item.get("alias") or username
             if not alias_raw:
                 continue
+            alias = str(alias_raw)
+            if alias in seen_aliases:
+                continue
+            seen_aliases.add(alias)
             status = str(item.get("connectedStatus") or "")
             rows.append(
                 SfOrgRow(
-                    alias=str(alias_raw),
+                    alias=alias,
                     username=str(username) if username else None,
                     connected=status.lower() == "connected",
                 )
