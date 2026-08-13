@@ -57,7 +57,8 @@ pip install -e ".[ui]"
 
 - **후보 스캔·등록** 탭: 컷오프 이후 VOC+SW 워크오더 목록(연동 여부 표시) → 워크오더 선택 → 미리보기(dry-run) → 내용 확인 후 실제 등록
 - **PMS 이슈 상태** 탭: 옵트인된 케이스에 연결된 PMS 이슈들의 현재 상태 확인
-- 바탕화면 아이콘으로 로컬만 띄우려면 [docs/local-app.md](docs/local-app.md) 참고
+- 바탕화면 아이콘으로 로컬만 띄우려면 [docs/local-app.md](docs/local-app.md) 참고 (`등록-로컬앱.bat`)
+- **클린 PC 최초 설치:** [docs/local-app-first-run.md](docs/local-app-first-run.md)
 
 집 PC를 Tailscale 허브로 쓰고 재부팅 후 자동 기동하려면 [docs/hub-autostart.md](docs/hub-autostart.md) 참고.
 
