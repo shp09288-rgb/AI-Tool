@@ -44,6 +44,31 @@ function Test-PortListening {
     return [bool](Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
 }
 
+function Test-AppHealthy {
+    try {
+        $h = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/_stcore/health" -UseBasicParsing -TimeoutSec 3
+        return ($h.StatusCode -eq 200)
+    } catch {
+        return $false
+    }
+}
+
+function Stop-LocalListeners {
+    $stopScript = Join-Path $PSScriptRoot "stop-local-app.ps1"
+    if (Test-Path -LiteralPath $stopScript) {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $stopScript -Port $Port | Out-Null
+    } else {
+        $listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty OwningProcess -Unique
+        foreach ($procId in $listeners) {
+            if ($procId -and $procId -gt 0) {
+                Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    Start-Sleep -Seconds 1
+}
+
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 Set-Location $RepoShort
 
@@ -91,9 +116,13 @@ if ($DelaySeconds -gt 0) {
 }
 
 if (Test-PortListening) {
-    Write-Log "already running on port $Port — opening browser only"
-    Start-Process $BrowserUrl
-    exit 0
+    if (Test-AppHealthy) {
+        Write-Log "healthy server already on port $Port — opening browser only"
+        Start-Process $BrowserUrl
+        exit 0
+    }
+    Write-Log "port $Port is in use but unhealthy (or Internal Server Error) — restarting"
+    Stop-LocalListeners
 }
 
 $env:PYTHONPATH = Join-Path $RepoShort "src"
