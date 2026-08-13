@@ -125,7 +125,7 @@ dry_run: true
     assert settings.sf_org_alias == "my-sandbox"
 
 
-def test_load_settings_voc_record_type_id_defaults_none(tmp_path: Path):
+def test_load_settings_voc_record_type_id_defaults_to_org_id(tmp_path: Path):
     settings_file = tmp_path / "settings.yaml"
     settings_file.write_text(
         'automation_enabled_after: "2026-12-01T00:00:00+09:00"',
@@ -134,7 +134,7 @@ def test_load_settings_voc_record_type_id_defaults_none(tmp_path: Path):
 
     settings = load_settings(settings_file)
 
-    assert settings.field_report.voc_record_type_id is None
+    assert settings.field_report.voc_record_type_id == "0122j000000CglcAAC"
 
 
 def test_load_settings_parses_voc_record_type_id(tmp_path: Path):

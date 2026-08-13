@@ -36,7 +36,7 @@ class FieldReportConfig(BaseModel):
 
     case_activities_field: str = "Activities__c"
     technical_service_record_type_id: str = "0120o000001lQJ5AAM"
-    voc_record_type_id: str | None = None
+    voc_record_type_id: str = "0122j000000CglcAAC"
     case_id_cell: str = "T9"
     fse_name_cell: str = "V5"
     report_date_cell: str = "V4"

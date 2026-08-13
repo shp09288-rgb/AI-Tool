@@ -28,8 +28,8 @@ sf_org_alias: parksystems
 #   owner_contains: 홍길동
 # 출장 보고 (로컬 DFS2 동기화 경로)
 # field_report_root: "C:\\Users\\shp09\\OneDrive - Park Systems\\DFS2 - General\\DFS2"
-# field_report:
-#   case_activities_field: Activities__c
-#   technical_service_record_type_id: "0120o000001lQJ5AAM"
-#   voc_record_type_id: "0122j000000CglcAAC"  # WorkOrder RecordType DeveloperName=VOC
+field_report:
+  # case_activities_field: Activities__c
+  # technical_service_record_type_id: "0120o000001lQJ5AAM"
+  voc_record_type_id: "0122j000000CglcAAC"  # WorkOrder RecordType DeveloperName=VOC (org default)
 dry_run: true
