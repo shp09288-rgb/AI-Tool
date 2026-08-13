@@ -55,12 +55,34 @@ if ($Address -eq "0.0.0.0") {
 }
 
 if (-not (Test-Path -LiteralPath $VenvPython)) {
-    Write-Log "ERROR: missing $VenvPython — run: python -m venv .venv && pip install -e `".[ui]`""
+    Write-Log "ERROR: missing $VenvPython — run 1-처음설치.bat (or: python -m venv .venv && pip install -e `".[ui]`")"
     exit 1
 }
 if (-not (Test-Path -LiteralPath $WebUi)) {
     Write-Log "ERROR: missing $WebUi"
     exit 1
+}
+
+# Self-heal missing deps from older ZIP installs (e.g. openpyxl)
+$needInstall = $false
+& $VenvPython -c "import openpyxl" 2>$null
+if ($LASTEXITCODE -ne 0) { $needInstall = $true }
+& $VenvPython -c "import streamlit" 2>$null
+if ($LASTEXITCODE -ne 0) { $needInstall = $true }
+if ($needInstall) {
+    Write-Log "missing packages detected — running: pip install -e `".[ui]`""
+    Set-Location $RepoShort
+    & $VenvPython -m pip install -e ".[ui]"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "ERROR: pip install -e .[ui] failed"
+        exit 1
+    }
+    & $VenvPython -c "import openpyxl" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "ERROR: openpyxl still missing after install"
+        exit 1
+    }
+    Write-Log "dependencies OK"
 }
 
 if ($DelaySeconds -gt 0) {
