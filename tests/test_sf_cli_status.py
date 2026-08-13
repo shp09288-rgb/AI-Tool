@@ -2,6 +2,7 @@ from ai_work_automation.sf.cli_status import (
     SfCliStatusError,
     get_sf_cli_status,
     list_sf_orgs,
+    login_sf_org,
     logout_sf_org,
 )
 
@@ -123,3 +124,25 @@ def test_logout_sf_org_raises_on_failure() -> None:
         assert False, "expected SfCliStatusError"
     except SfCliStatusError as exc:
         assert "not logged in" in str(exc)
+
+
+def test_login_sf_org_ok() -> None:
+    calls: list[list[str]] = []
+
+    def fake_login(args: list[str]) -> int:
+        calls.append(args)
+        return 0
+
+    login_sf_org("parksystems", run_sf_login=fake_login)
+    assert calls == [["org", "login", "web", "--alias", "parksystems"]]
+
+
+def test_login_sf_org_raises_on_nonzero() -> None:
+    def fake_login(_args: list[str]) -> int:
+        return 1
+
+    try:
+        login_sf_org("x", run_sf_login=fake_login)
+        assert False, "expected SfCliStatusError"
+    except SfCliStatusError as exc:
+        assert "login" in str(exc).lower() or "x" in str(exc)

@@ -122,3 +122,33 @@ def logout_sf_org(
     data = runner(["org", "logout", "--target-org", org_alias])
     if data.get("status") != 0:
         raise SfCliStatusError(str(data.get("message") or data)[:200])
+
+
+def _run_sf_login_subprocess(args: list[str]) -> int:
+    exe = shutil.which("sf")
+    if exe is None:
+        raise SfCliStatusError(
+            "Salesforce CLI(sf)를 찾을 수 없습니다. "
+            "`1-처음설치.bat`를 다시 실행하거나 "
+            "https://developer.salesforce.com/tools/salesforcecli 에서 설치한 뒤 "
+            "`sf org login web --alias parksystems` 로 로그인하세요."
+        )
+    proc = subprocess.run(
+        [exe, *args],
+        text=True,
+        encoding="utf-8",
+    )
+    return int(proc.returncode)
+
+
+def login_sf_org(
+    org_alias: str,
+    run_sf_login: Callable[[list[str]], int] | None = None,
+) -> None:
+    runner = run_sf_login or _run_sf_login_subprocess
+    code = runner(["org", "login", "web", "--alias", org_alias])
+    if code != 0:
+        raise SfCliStatusError(
+            f"Salesforce 로그인에 실패했습니다 (alias={org_alias}, exit={code}). "
+            "브라우저에서 로그인했는지 확인하세요."
+        )
