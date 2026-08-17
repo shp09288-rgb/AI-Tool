@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ai_work_automation.sf.adapter import SafetyError, SalesforceAdapter
+from ai_work_automation.tool_first_voc import WorkOrderAssetHint
 
 VOC_RECORD_TYPE_ID = "012VOC000000000AAA"
 
@@ -158,3 +159,32 @@ def test_find_case_by_number_escapes_soql():
 
     soql = client.query.call_args.args[0]
     assert "CaseNumber = '0017\\'341'" in soql
+
+
+def test_list_work_order_asset_hints_maps_rows():
+    client = MagicMock()
+    client.query.return_value = {
+        "records": [
+            {
+                "Id": "0WO1",
+                "AssetId": "02iASSET1",
+                "Asset_SID__c": "NX-10",
+                "CreatedDate": "2026-08-01T12:00:00.000+00:00",
+            }
+        ]
+    }
+    adapter = _adapter(client=client)
+
+    hints = adapter.list_work_order_asset_hints("500CASE1")
+
+    assert hints == [
+        WorkOrderAssetHint(
+            asset_id="02iASSET1",
+            asset_sid="NX-10",
+            created_date=datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc),
+        )
+    ]
+    soql = client.query.call_args.args[0]
+    assert "Asset_SID__c" in soql
+    assert "CaseId = '500CASE1'" in soql
+    assert "ORDER BY CreatedDate DESC" in soql

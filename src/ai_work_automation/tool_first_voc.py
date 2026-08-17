@@ -17,6 +17,64 @@ Mode = Literal["new_case", "existing_case"]
 PmsAction = Literal["create", "comment", "skip"]
 
 
+@dataclass(frozen=True)
+class WorkOrderAssetHint:
+    asset_id: str | None = None
+    asset_sid: str | None = None
+    created_date: datetime | None = None
+
+
+@dataclass(frozen=True)
+class AssetHints:
+    asset_id: str | None = None
+    asset_sid: str | None = None
+
+
+def _sorted_work_order_hints(
+    work_orders: list[WorkOrderAssetHint],
+) -> list[WorkOrderAssetHint]:
+    return sorted(
+        work_orders,
+        key=lambda h: h.created_date or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+
+
+def resolve_asset_hints(
+    case: CaseRecord | None,
+    work_orders: list[WorkOrderAssetHint],
+) -> AssetHints:
+    """Case.AssetId first, then newest WO AssetId; SID from newest WO with SID."""
+    sorted_wos = _sorted_work_order_hints(work_orders)
+
+    asset_id: str | None = None
+    if case and case.asset_id:
+        asset_id = case.asset_id
+    else:
+        for wo in sorted_wos:
+            if wo.asset_id:
+                asset_id = wo.asset_id
+                break
+
+    asset_sid: str | None = None
+    for wo in sorted_wos:
+        if wo.asset_sid:
+            asset_sid = wo.asset_sid
+            break
+
+    return AssetHints(asset_id=asset_id, asset_sid=asset_sid)
+
+
+def empty_only_prefill(
+    current_asset: str | None,
+    current_sid: str | None,
+    hints: AssetHints,
+) -> tuple[str | None, str | None]:
+    asset = current_asset or hints.asset_id
+    sid = current_sid or hints.asset_sid
+    return asset, sid
+
+
 @dataclass
 class ToolFirstVocInput:
     mode: Mode
@@ -41,6 +99,7 @@ class ToolFirstVocResult:
     pms_url: str | None
     message: str
     links: dict[str, str] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
 
 def _result(
@@ -54,6 +113,7 @@ def _result(
     pms_issue_id: str | None = None,
     pms_url: str | None = None,
     links: dict[str, str] | None = None,
+    warnings: list[str] | None = None,
 ) -> ToolFirstVocResult:
     return ToolFirstVocResult(
         ok=ok,
@@ -65,6 +125,7 @@ def _result(
         pms_url=pms_url,
         message=message,
         links=links or {},
+        warnings=warnings or [],
     )
 
 
@@ -90,15 +151,13 @@ def _case_fields(payload: ToolFirstVocInput) -> dict[str, Any]:
     return fields
 
 
-def _resolve_asset_id(
-    payload: ToolFirstVocInput, case: CaseRecord | None
-) -> str | None:
-    """Prefer explicit payload; else copy AssetId from the related Case."""
-    if payload.asset_id:
-        return payload.asset_id
-    if case and case.asset_id:
-        return case.asset_id
-    return None
+def _apply_asset_fields(
+    payload: ToolFirstVocInput,
+    hints: AssetHints,
+) -> tuple[str | None, str | None]:
+    asset_id = payload.asset_id or hints.asset_id
+    asset_sid = payload.asset_sid or hints.asset_sid
+    return asset_id, asset_sid
 
 
 def _wo_fields(
@@ -106,6 +165,7 @@ def _wo_fields(
     settings: Any,
     *,
     case: CaseRecord | None = None,
+    hints: AssetHints | None = None,
 ) -> dict[str, Any]:
     dept_field = getattr(settings, "wo_department_field", "Relevant_Department__c")
     fields: dict[str, Any] = {
@@ -114,11 +174,12 @@ def _wo_fields(
     }
     if payload.sf_summary:
         fields["Description"] = payload.sf_summary
-    asset_id = _resolve_asset_id(payload, case)
+    resolved = hints if hints is not None else resolve_asset_hints(case, [])
+    asset_id, asset_sid = _apply_asset_fields(payload, resolved)
     if asset_id:
         fields["AssetId"] = asset_id
-    if payload.asset_sid:
-        fields["Asset_SID__c"] = payload.asset_sid
+    if asset_sid:
+        fields["Asset_SID__c"] = asset_sid
     return fields
 
 
@@ -152,14 +213,17 @@ def _pms_body(payload: ToolFirstVocInput) -> str:
     return compact_pms_html(payload.pms_html_body) if payload.pms_html_body else ""
 
 
-def _best_effort_attach(sf: Any, case_id: str, wo_id: str, files: list[tuple[str, bytes]]) -> None:
+def _best_effort_attach(
+    sf: Any, case_id: str, wo_id: str, files: list[tuple[str, bytes]]
+) -> list[str]:
     if not files:
-        return
+        return []
     client = getattr(sf, "client", None)
     create = getattr(client, "create_content_version_from_bytes", None)
     if create is None:
-        return
-    for record_id in (case_id, wo_id):
+        return ["SF 첨부 스킵: create_content_version_from_bytes를 사용할 수 없습니다."]
+    warnings: list[str] = []
+    for record_id, target in ((case_id, "Case"), (wo_id, "WO")):
         if not record_id:
             continue
         for name, data in files:
@@ -170,8 +234,9 @@ def _best_effort_attach(sf: Any, case_id: str, wo_id: str, files: list[tuple[str
                     first_publish_location_id=record_id,
                     data=data,
                 )
-            except Exception:
-                continue
+            except Exception as exc:
+                warnings.append(f"SF 첨부 실패: {name} → {target} — {exc}")
+    return warnings
 
 
 def _links(sf: Any, case_id: str | None, wo_id: str | None, pms_url: str | None) -> dict[str, str]:
@@ -207,6 +272,7 @@ def _after_pms_write(
     pms_url: str | None,
     success_message: str,
     line: str,
+    warnings: list[str] | None = None,
 ) -> ToolFirstVocResult:
     links = _links(sf, case_id, wo_id, pms_url)
     try:
@@ -225,6 +291,7 @@ def _after_pms_write(
                 f"{exc}"
             ),
             links=links,
+            warnings=warnings,
         )
     return _result(
         ok=True,
@@ -236,6 +303,7 @@ def _after_pms_write(
         pms_url=pms_url,
         message=success_message,
         links=links,
+        warnings=warnings,
     )
 
 
@@ -290,6 +358,7 @@ def run_tool_first_voc(
     wo_id: str | None = None
     pms_issue_id: str | None = existing_issue
     pms_url: str | None = None
+    attach_warnings: list[str] = []
     try:
         if payload.mode == "new_case":
             case_id = sf.create_case(_case_fields(payload))
@@ -298,12 +367,21 @@ def run_tool_first_voc(
             assert case is not None
             case_id = case.id
 
+        hint_rows: list[WorkOrderAssetHint] = []
+        if case_id:
+            list_fn = getattr(sf, "list_work_order_asset_hints", None)
+            if list_fn is not None:
+                hint_rows = list_fn(case_id)
+        hints = resolve_asset_hints(case, hint_rows)
+
         wo_id = sf.create_voc_work_order(
             case_id=case_id,
-            fields=_wo_fields(payload, settings, case=case),
+            fields=_wo_fields(payload, settings, case=case, hints=hints),
         )
         wo = _synthetic_wo(wo_id, case_id, payload)
-        _best_effort_attach(sf, case_id, wo_id, payload.attachment_files)
+        attach_warnings = _best_effort_attach(
+            sf, case_id, wo_id, payload.attachment_files
+        )
         body = _pms_body(payload)
 
         if existing_issue:
@@ -320,6 +398,7 @@ def run_tool_first_voc(
                     pms_issue_id=existing_issue,
                     message=f"PMS 댓글 실패: {conn.error}",
                     links=_links(sf, case_id, wo_id, None),
+                    warnings=attach_warnings,
                 )
             return _after_pms_write(
                 sf,
@@ -332,6 +411,7 @@ def run_tool_first_voc(
                 pms_url=conn.url,
                 success_message="기존 PMS 이슈에 댓글을 등록했습니다.",
                 line=f"PMS – {conn.url} (댓글)",
+                warnings=attach_warnings,
             )
 
         draft = build_pms_draft(
@@ -358,6 +438,7 @@ def run_tool_first_voc(
                 pms_action="create",
                 message=f"PMS 이슈 생성 실패: {conn.error}",
                 links=_links(sf, case_id, wo_id, None),
+                warnings=attach_warnings,
             )
         return _after_pms_write(
             sf,
@@ -370,6 +451,7 @@ def run_tool_first_voc(
             pms_url=conn.url,
             success_message="PMS 이슈를 생성했습니다.",
             line=f"PMS – {conn.url}",
+            warnings=attach_warnings,
         )
     except Exception as exc:
         if case_id or wo_id or pms_issue_id:
@@ -383,5 +465,6 @@ def run_tool_first_voc(
                 pms_url=pms_url,
                 message=str(exc),
                 links=_links(sf, case_id, wo_id, pms_url),
+                warnings=attach_warnings,
             )
         raise
