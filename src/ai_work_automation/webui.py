@@ -70,7 +70,12 @@ from ai_work_automation.job_log import JobLogStore
 from ai_work_automation.opt_in import OptInStore
 from ai_work_automation.pipeline import run_case_automation
 from ai_work_automation.router import load_routes
-from ai_work_automation.services import scan_candidates, status_overview
+from ai_work_automation.services import (
+    case_group_label,
+    group_unlinked_by_case,
+    scan_candidates,
+    status_overview,
+)
 from ai_work_automation.settings import load_settings
 from ai_work_automation.media_crop import crop_image_bytes, image_bytes_to_html
 from ai_work_automation.tool_first_voc import (
@@ -1915,38 +1920,75 @@ with tab_scan:
     rows = st.session_state.get("scan_rows")
     if rows is not None:
         unlinked = [r for r in rows if not r.linked]
-        st.caption(f"전체 {len(rows)}건 중 PMS 미연동 {len(unlinked)}건 (컷오프 이후 생성분)")
+        groups = group_unlinked_by_case(rows)
+        st.caption(
+            f"전체 {len(rows)}건 중 PMS 미연동 {len(unlinked)}건 · 미연동 Case {len(groups)}건 "
+            f"(컷오프 이후 생성분)"
+        )
 
         st.dataframe(
             [
                 {
-                    "케이스": r.case_number,
-                    "케이스 담당자": r.case_owner_name,
-                    "워크오더": r.work_order_number,
-                    "워크오더 담당자": r.owner_name,
-                    "장비": r.asset_name,
-                    "SID": r.asset_sid,
-                    "상태": r.status,
-                    "제목": r.title,
-                    "생성일": r.created_date[:10],
-                    "PMS": "연동됨" if r.linked else "미연동",
+                    "케이스": g.case_number,
+                    "케이스 담당자": g.case_owner_name,
+                    "미연동 WO": len(g.unlinked),
+                    "연동 WO": g.linked_count,
+                    "제목": (g.unlinked[0].title if g.unlinked else g.case_subject)[:60],
+                    "최신 생성일": max(
+                        (r.created_date[:10] for r in g.unlinked if r.created_date),
+                        default="",
+                    ),
                 }
-                for r in rows
+                for g in groups
             ],
             use_container_width=True,
             hide_index=True,
         )
 
+        with st.expander("WO 상세 표 보기"):
+            st.dataframe(
+                [
+                    {
+                        "케이스": r.case_number,
+                        "케이스 담당자": r.case_owner_name,
+                        "워크오더": r.work_order_number,
+                        "워크오더 담당자": r.owner_name,
+                        "장비": r.asset_name,
+                        "SID": r.asset_sid,
+                        "상태": r.status,
+                        "제목": r.title,
+                        "생성일": r.created_date[:10],
+                        "PMS": "연동됨" if r.linked else "미연동",
+                    }
+                    for r in rows
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+
         st.divider()
-        st.subheader("등록할 워크오더 선택 (다중 선택 가능)")
-        options = {
-            f"{r.case_number} / WO {r.work_order_number} / {r.title[:45]}": r
-            for r in unlinked
-        }
-        if not options:
+        st.subheader("등록할 대상 선택")
+        mode = st.radio(
+            "선택 단위",
+            ["Case 단위", "WO 개별"],
+            horizontal=True,
+            key="scan_select_mode",
+            index=0,
+        )
+        if not groups:
             st.info("미연동 후보가 없습니다.")
         else:
-            picked_labels = st.multiselect("워크오더", list(options.keys()))
+            if mode == "Case 단위":
+                options = {case_group_label(g): g for g in groups}
+                picked = st.multiselect("Case", list(options.keys()), key="scan_case_pick")
+                targets = [row for label in picked for row in options[label].unlinked]
+            else:
+                options = {
+                    f"{r.case_number} / WO {r.work_order_number} / {r.title[:45]}": r
+                    for r in unlinked
+                }
+                picked = st.multiselect("워크오더", list(options.keys()), key="scan_wo_pick")
+                targets = [options[label] for label in picked]
             issue_type_label = st.radio(
                 "PMS 이슈 타입",
                 ["자동 추정", "SR (문제/버그)", "ER (개선/추가 요청)"],
@@ -1954,7 +1996,6 @@ with tab_scan:
                 key="scan_type",
             )
             issue_type = {"SR (문제/버그)": "SR", "ER (개선/추가 요청)": "ER"}.get(issue_type_label)
-            targets = [options[label] for label in picked_labels]
             if targets:
                 _process_selection(s, targets, issue_type, key_prefix="scan")
 

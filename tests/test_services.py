@@ -4,7 +4,14 @@ from unittest.mock import MagicMock
 
 from ai_work_automation.models import ConnectorResult, WorkOrderRecord
 from ai_work_automation.opt_in import OptInStore
-from ai_work_automation.services import scan_candidates, status_overview
+from ai_work_automation.services import (
+    CaseScanGroup,
+    ScanRow,
+    case_group_label,
+    group_unlinked_by_case,
+    scan_candidates,
+    status_overview,
+)
 from ai_work_automation.sf.adapter import CandidateWorkOrder
 
 
@@ -104,3 +111,70 @@ def test_status_overview_fetches_issue_states(tmp_path: Path):
     assert row.issue_status == "Closed"
     assert row.issue_subject == "이슈 제목"
     pms.get_issue.assert_called_once_with("3807")
+
+
+def _row(**kwargs) -> ScanRow:
+    data = dict(
+        case_id="500A",
+        case_number="00183895",
+        case_subject="Subject",
+        work_order_id="0WO1",
+        work_order_number="00025526",
+        title="VOC A",
+        created_date="2026-08-12T10:00:00+00:00",
+        linked=False,
+        selected=False,
+    )
+    data.update(kwargs)
+    return ScanRow(**data)
+
+
+def test_group_same_case_two_unlinked_into_one_group():
+    rows = [
+        _row(work_order_id="0WO1", work_order_number="00025526", title="First",
+             created_date="2026-08-12T09:00:00+00:00"),
+        _row(work_order_id="0WO2", work_order_number="00025527", title="Second",
+             created_date="2026-08-12T11:00:00+00:00"),
+    ]
+    groups = group_unlinked_by_case(rows)
+    assert len(groups) == 1
+    assert len(groups[0].unlinked) == 2
+    assert groups[0].linked_count == 0
+    assert case_group_label(groups[0]).startswith("00183895 · 미연동 2건 ·")
+
+
+def test_group_counts_linked_but_excludes_from_unlinked():
+    rows = [
+        _row(work_order_id="0WO1", linked=False),
+        _row(work_order_id="0WO2", work_order_number="00025527", linked=True,
+             created_date="2026-08-12T12:00:00+00:00"),
+    ]
+    groups = group_unlinked_by_case(rows)
+    assert len(groups) == 1
+    assert len(groups[0].unlinked) == 1
+    assert groups[0].linked_count == 1
+
+
+def test_group_key_falls_back_to_case_number_when_case_id_empty():
+    rows = [
+        _row(case_id="", case_number="00190001", work_order_id="0WO1"),
+        _row(case_id="", case_number="00190001", work_order_id="0WO2",
+             work_order_number="0002"),
+    ]
+    groups = group_unlinked_by_case(rows)
+    assert len(groups) == 1
+    assert groups[0].case_number == "00190001"
+
+
+def test_group_omits_cases_with_only_linked_rows():
+    rows = [_row(linked=True)]
+    assert group_unlinked_by_case(rows) == []
+
+
+def test_groups_sorted_by_newest_unlinked_created_date_desc():
+    older = _row(case_id="500OLD", case_number="00100001",
+                 created_date="2026-01-01T00:00:00+00:00")
+    newer = _row(case_id="500NEW", case_number="00100002",
+                 created_date="2026-08-15T00:00:00+00:00")
+    groups = group_unlinked_by_case([older, newer])
+    assert [g.case_id for g in groups] == ["500NEW", "500OLD"]

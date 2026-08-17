@@ -25,6 +25,15 @@ class ScanRow(BaseModel):
     selected: bool
 
 
+class CaseScanGroup(BaseModel):
+    case_id: str
+    case_number: str
+    case_subject: str
+    case_owner_name: str = ""
+    unlinked: list[ScanRow]
+    linked_count: int = 0
+
+
 class StatusRow(BaseModel):
     case_id: str
     work_order_id: str
@@ -75,6 +84,48 @@ def scan_candidates(
             )
         )
     return rows
+
+
+def _case_group_key(row: ScanRow) -> str:
+    return row.case_id if row.case_id else row.case_number
+
+
+def _newest_unlinked_date(group: CaseScanGroup) -> str:
+    return max((row.created_date for row in group.unlinked), default="")
+
+
+def group_unlinked_by_case(rows: list[ScanRow]) -> list[CaseScanGroup]:
+    """Group scan rows by case; unlinked only in .unlinked; sort by newest unlinked created_date desc."""
+    buckets: dict[str, list[ScanRow]] = {}
+    for row in rows:
+        buckets.setdefault(_case_group_key(row), []).append(row)
+
+    groups: list[CaseScanGroup] = []
+    for bucket in buckets.values():
+        unlinked = [row for row in bucket if not row.linked]
+        if not unlinked:
+            continue
+        meta = next((row for row in bucket if not row.linked), bucket[0])
+        groups.append(
+            CaseScanGroup(
+                case_id=meta.case_id,
+                case_number=meta.case_number,
+                case_subject=meta.case_subject,
+                case_owner_name=meta.case_owner_name,
+                unlinked=unlinked,
+                linked_count=sum(1 for row in bucket if row.linked),
+            )
+        )
+
+    groups.sort(key=_newest_unlinked_date, reverse=True)
+    return groups
+
+
+def case_group_label(group: CaseScanGroup, *, title_max: int = 40) -> str:
+    """Return '{case_number} · 미연동 {k}건 · {title}' for multiselect."""
+    newest = max(group.unlinked, key=lambda row: row.created_date or "", default=None)
+    title = (newest.title if newest else group.case_subject)[:title_max]
+    return f"{group.case_number} · 미연동 {len(group.unlinked)}건 · {title}"
 
 
 def status_overview(sf: Any, pms: Any, opt_in: OptInStore) -> list[StatusRow]:
