@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -370,6 +372,32 @@ class SalesforceAdapter:
         soql = f"SELECT {field_list} FROM WorkOrder WHERE CaseId = '{case_id}'"
         data = self.client.query(soql)
         return [self._row_to_work_order(row) for row in data.get("records", [])]
+
+    def list_work_order_asset_hints(self, case_id: str) -> list[WorkOrderAssetHint]:
+        from ai_work_automation.tool_first_voc import WorkOrderAssetHint
+
+        soql = (
+            "SELECT Id, AssetId, Asset_SID__c, CreatedDate FROM WorkOrder "
+            f"WHERE CaseId = '{_soql_escape(case_id)}' "
+            "ORDER BY CreatedDate DESC"
+        )
+        rows = self.client.query(soql).get("records", [])
+        out: list[WorkOrderAssetHint] = []
+        for row in rows:
+            created = row.get("CreatedDate")
+            created_dt = (
+                datetime.fromisoformat(created.replace("Z", "+00:00"))
+                if created
+                else None
+            )
+            out.append(
+                WorkOrderAssetHint(
+                    asset_id=row.get("AssetId") or None,
+                    asset_sid=row.get("Asset_SID__c") or None,
+                    created_date=created_dt,
+                )
+            )
+        return out
 
     def find_technical_service_wos_on_day(
         self, case_id: str, work_day: date

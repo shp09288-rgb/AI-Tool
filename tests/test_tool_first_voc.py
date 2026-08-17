@@ -5,7 +5,11 @@ from ai_work_automation.models import CaseRecord, ConnectorResult, WorkOrderReco
 from ai_work_automation.settings import Settings
 from ai_work_automation.sf.adapter import SafetyError
 from ai_work_automation.tool_first_voc import (
+    AssetHints,
     ToolFirstVocInput,
+    WorkOrderAssetHint,
+    empty_only_prefill,
+    resolve_asset_hints,
     run_tool_first_voc,
 )
 
@@ -70,6 +74,7 @@ def _sf(*, case: CaseRecord | None = None, existing_wos: list | None = None) -> 
     sf.client.post_sobject = MagicMock()
     sf.find_case_by_number.return_value = case
     sf.get_work_orders_for_case.return_value = existing_wos or []
+    sf.list_work_order_asset_hints.return_value = []
     sf.create_case.return_value = "500NEW"
     sf.create_voc_work_order.return_value = "0WONEW"
     return sf
@@ -350,3 +355,139 @@ def test_activities_append_failure_still_returns_created_ids():
     assert result.links["work_order"] == "https://sf.example/0WONEW"
     assert result.links["pms"] == "https://pms.example/issues/4710"
     assert "Activities" in result.message
+
+
+def test_resolve_prefers_case_asset_id_over_wo():
+    case = _case(asset_id="02iCASE")
+    wos = [
+        WorkOrderAssetHint(
+            asset_id="02iWO",
+            asset_sid="SID-WO",
+            created_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        )
+    ]
+    assert resolve_asset_hints(case, wos) == AssetHints(
+        asset_id="02iCASE", asset_sid="SID-WO"
+    )
+
+
+def test_resolve_uses_newest_wo_when_case_has_no_asset():
+    case = _case(asset_id=None)
+    older = WorkOrderAssetHint(
+        asset_id="02iOLD",
+        asset_sid="SID-OLD",
+        created_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    newer = WorkOrderAssetHint(
+        asset_id="02iNEW",
+        asset_sid="SID-NEW",
+        created_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
+    )
+    assert resolve_asset_hints(case, [older, newer]) == AssetHints(
+        asset_id="02iNEW", asset_sid="SID-NEW"
+    )
+
+
+def test_resolve_sid_from_wo_even_if_asset_from_case():
+    case = _case(asset_id="02iCASE")
+    wos = [
+        WorkOrderAssetHint(
+            asset_id=None,
+            asset_sid="NX-10",
+            created_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        )
+    ]
+    assert resolve_asset_hints(case, wos).asset_sid == "NX-10"
+
+
+def test_existing_case_copies_sibling_sid_onto_wo_when_payload_omits_it():
+    case = _case(asset_id="02iCASE")
+    sf = _sf(case=case, existing_wos=[])
+    sf.list_work_order_asset_hints.return_value = [
+        WorkOrderAssetHint(
+            asset_id=None,
+            asset_sid="NX-10",
+            created_date=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        )
+    ]
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4710", url="https://pms.example/issues/4710"
+    )
+    result = run_tool_first_voc(
+        sf, pms, _settings(), _payload(asset_id=None, asset_sid=None),
+        dry_run=False, approved=True,
+    )
+    assert result.ok is True
+    fields = sf.create_voc_work_order.call_args.kwargs["fields"]
+    assert fields["AssetId"] == "02iCASE"
+    assert fields["Asset_SID__c"] == "NX-10"
+
+
+def test_payload_sid_wins_over_sibling_hint():
+    case = _case(asset_id=None)
+    sf = _sf(case=case, existing_wos=[])
+    sf.list_work_order_asset_hints.return_value = [
+        WorkOrderAssetHint(asset_sid="FROM-WO", created_date=datetime(2026, 8, 1, tzinfo=timezone.utc))
+    ]
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4710", url="https://pms.example/issues/4710"
+    )
+    run_tool_first_voc(
+        sf, pms, _settings(), _payload(asset_sid="FROM-UI"),
+        dry_run=False, approved=True,
+    )
+    fields = sf.create_voc_work_order.call_args.kwargs["fields"]
+    assert fields["Asset_SID__c"] == "FROM-UI"
+
+
+def test_attach_warnings_preserved_on_unexpected_post_attach_exception():
+    sf = _sf()
+    sf.client.create_content_version_from_bytes.side_effect = RuntimeError("boom")
+    pms = MagicMock()
+    pms.create.side_effect = RuntimeError("pms down")
+    payload = _payload(
+        mode="new_case",
+        case_number=None,
+        attachment_files=[("shot.png", b"PNGDATA")],
+    )
+
+    result = run_tool_first_voc(
+        sf, pms, _settings(), payload, dry_run=False, approved=True
+    )
+
+    assert result.ok is False
+    assert result.case_id == "500NEW"
+    assert result.work_order_id == "0WONEW"
+    assert result.warnings
+    assert any("shot.png" in w for w in result.warnings)
+    assert "pms down" in result.message
+
+
+def test_attach_failure_sets_warnings_but_keeps_ok():
+    case = _case()
+    sf = _sf(case=case, existing_wos=[])
+    sf.list_work_order_asset_hints.return_value = []
+    sf.client.create_content_version_from_bytes.side_effect = RuntimeError("boom")
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4710", url="https://pms.example/issues/4710"
+    )
+    result = run_tool_first_voc(
+        sf,
+        pms,
+        _settings(),
+        _payload(attachment_files=[("shot.png", b"abc")]),
+        dry_run=False,
+        approved=True,
+    )
+    assert result.ok is True
+    assert result.warnings
+    assert any("shot.png" in w for w in result.warnings)
+
+
+def test_empty_only_prefill_does_not_overwrite():
+    hints = AssetHints(asset_id="02iH", asset_sid="SID-H")
+    assert empty_only_prefill("02iUSER", "", hints) == ("02iUSER", "SID-H")
+    assert empty_only_prefill(None, "SID-USER", hints) == ("02iH", "SID-USER")

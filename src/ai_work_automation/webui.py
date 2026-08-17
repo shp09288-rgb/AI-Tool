@@ -73,7 +73,13 @@ from ai_work_automation.router import load_routes
 from ai_work_automation.services import scan_candidates, status_overview
 from ai_work_automation.settings import load_settings
 from ai_work_automation.media_crop import crop_image_bytes, image_bytes_to_html
-from ai_work_automation.tool_first_voc import ToolFirstVocInput, ToolFirstVocResult, run_tool_first_voc
+from ai_work_automation.tool_first_voc import (
+    ToolFirstVocInput,
+    ToolFirstVocResult,
+    empty_only_prefill,
+    resolve_asset_hints,
+    run_tool_first_voc,
+)
 from ai_work_automation.ui_theme import inject_apple_theme, render_app_hero
 
 load_dotenv()
@@ -1593,6 +1599,8 @@ def _render_voc_result(result: ToolFirstVocResult) -> None:
         st.success(result.message)
     else:
         st.error(result.message)
+    for w in result.warnings or []:
+        st.warning(w)
     bits = []
     if result.dry_run:
         bits.append("dry_run")
@@ -1691,8 +1699,17 @@ def _render_voc_write_tab(s) -> None:
                     if found:
                         if not st.session_state.get("voc_write_title"):
                             st.session_state["voc_write_title"] = found.subject
-                        if found.asset_id and not st.session_state.get("voc_write_asset"):
-                            st.session_state["voc_write_asset"] = found.asset_id
+                        hints_rows = sf.list_work_order_asset_hints(found.id)
+                        hints = resolve_asset_hints(found, hints_rows)
+                        pref_asset, pref_sid = empty_only_prefill(
+                            (st.session_state.get("voc_write_asset") or "").strip() or None,
+                            (st.session_state.get("voc_write_sid") or "").strip() or None,
+                            hints,
+                        )
+                        if not (st.session_state.get("voc_write_asset") or "").strip() and hints.asset_id:
+                            st.session_state["voc_write_asset"] = pref_asset
+                        if not (st.session_state.get("voc_write_sid") or "").strip() and hints.asset_sid:
+                            st.session_state["voc_write_sid"] = pref_sid
                     else:
                         st.warning(f"Case {number}을(를) 찾을 수 없습니다.")
                 finally:
@@ -1700,7 +1717,8 @@ def _render_voc_write_tab(s) -> None:
         found = st.session_state.get("voc_write_case")
         if found:
             st.caption(
-                f"제목: {found.subject} · Asset: {found.asset_id or '-'} · "
+                f"제목: {found.subject} · "
+                f"Asset: {st.session_state.get('voc_write_asset') or '-'} · "
                 f"SID: {st.session_state.get('voc_write_sid') or '-'}"
             )
 
