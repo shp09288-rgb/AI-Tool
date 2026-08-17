@@ -75,6 +75,49 @@ def _sf(*, case: CaseRecord | None = None, existing_wos: list | None = None) -> 
     return sf
 
 
+def test_existing_case_copies_case_asset_id_onto_wo_when_payload_omits_it():
+    case = _case(asset_id="02iASSET1")
+    sf = _sf(case=case, existing_wos=[])
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4710", url="https://pms.example/issues/4710"
+    )
+
+    result = run_tool_first_voc(
+        sf,
+        pms,
+        _settings(),
+        _payload(asset_id=None),
+        dry_run=False,
+        approved=True,
+    )
+
+    assert result.ok is True
+    fields = sf.create_voc_work_order.call_args.kwargs["fields"]
+    assert fields["AssetId"] == "02iASSET1"
+
+
+def test_existing_case_prefers_payload_asset_id_over_case():
+    case = _case(asset_id="02iCASE")
+    sf = _sf(case=case, existing_wos=[])
+    pms = MagicMock()
+    pms.create.return_value = ConnectorResult(
+        ok=True, ref="4710", url="https://pms.example/issues/4710"
+    )
+
+    run_tool_first_voc(
+        sf,
+        pms,
+        _settings(),
+        _payload(asset_id="02iPAYLOAD"),
+        dry_run=False,
+        approved=True,
+    )
+
+    fields = sf.create_voc_work_order.call_args.kwargs["fields"]
+    assert fields["AssetId"] == "02iPAYLOAD"
+
+
 def test_existing_case_with_pms_issue_adds_comment_not_create():
     case = _case()
     old_wo = _wo(activities=f"PMS – {PMS_URL}")

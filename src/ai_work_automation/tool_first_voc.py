@@ -90,7 +90,23 @@ def _case_fields(payload: ToolFirstVocInput) -> dict[str, Any]:
     return fields
 
 
-def _wo_fields(payload: ToolFirstVocInput, settings: Any) -> dict[str, Any]:
+def _resolve_asset_id(
+    payload: ToolFirstVocInput, case: CaseRecord | None
+) -> str | None:
+    """Prefer explicit payload; else copy AssetId from the related Case."""
+    if payload.asset_id:
+        return payload.asset_id
+    if case and case.asset_id:
+        return case.asset_id
+    return None
+
+
+def _wo_fields(
+    payload: ToolFirstVocInput,
+    settings: Any,
+    *,
+    case: CaseRecord | None = None,
+) -> dict[str, Any]:
     dept_field = getattr(settings, "wo_department_field", "Relevant_Department__c")
     fields: dict[str, Any] = {
         "Subject": payload.title,
@@ -98,8 +114,9 @@ def _wo_fields(payload: ToolFirstVocInput, settings: Any) -> dict[str, Any]:
     }
     if payload.sf_summary:
         fields["Description"] = payload.sf_summary
-    if payload.asset_id:
-        fields["AssetId"] = payload.asset_id
+    asset_id = _resolve_asset_id(payload, case)
+    if asset_id:
+        fields["AssetId"] = asset_id
     if payload.asset_sid:
         fields["Asset_SID__c"] = payload.asset_sid
     return fields
@@ -282,7 +299,8 @@ def run_tool_first_voc(
             case_id = case.id
 
         wo_id = sf.create_voc_work_order(
-            case_id=case_id, fields=_wo_fields(payload, settings)
+            case_id=case_id,
+            fields=_wo_fields(payload, settings, case=case),
         )
         wo = _synthetic_wo(wo_id, case_id, payload)
         _best_effort_attach(sf, case_id, wo_id, payload.attachment_files)
